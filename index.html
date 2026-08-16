@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Reorder Tool</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Arial, sans-serif; background: #f4f6f8; color: #222;
+    }
+    .container { max-width: 1050px; margin: 0 auto; padding: 24px 16px 50px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .subtitle { margin: 0 0 22px; color: #666; }
+    .card {
+      background: white; border-radius: 14px; padding: 20px;
+      box-shadow: 0 3px 14px rgba(0,0,0,.08); margin-bottom: 18px;
+    }
+    .upload {
+      border: 2px dashed #aeb7c2; border-radius: 12px; padding: 28px;
+      text-align: center; cursor: pointer; background: #fafbfc;
+    }
+    .upload:hover { background: #f2f5f8; }
+    input[type=file] { display: none; }
+    .buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    button {
+      border: 0; border-radius: 9px; padding: 11px 17px; cursor: pointer;
+      font-size: 15px; background: #e8edf2;
+    }
+    button.primary { background: #1769e0; color: white; }
+    button.success { background: #168a4a; color: white; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .parts { display: flex; gap: 10px; margin: 14px 0; }
+    .parts button.active { background: #1769e0; color: white; }
+    .status { margin-top: 12px; color: #555; min-height: 20px; }
+    .preview {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+      gap: 14px; margin-top: 18px;
+    }
+    .page {
+      background: #fff; border: 1px solid #d8dde3; border-radius: 10px;
+      padding: 8px; text-align: center;
+    }
+    .page img { width: 100%; height: 175px; object-fit: contain; background: #eee; border-radius: 6px; }
+    .page .new { font-weight: bold; margin-top: 7px; }
+    .page .original { color: #666; font-size: 13px; margin-top: 3px; }
+    .hidden { display: none; }
+    .note { font-size: 13px; color: #666; line-height: 1.5; }
+    @media (max-width: 600px) {
+      h1 { font-size: 23px; }
+      .container { padding: 16px 10px 40px; }
+      .preview { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>PDF Reorder Tool</h1>
+  <p class="subtitle">Upload a PDF, choose 2 or 3 parts, preview the aligned order, and download.</p>
+
+  <div class="card">
+    <label class="upload" for="pdfInput">
+      <strong>Choose PDF</strong><br>
+      <span id="fileName">Tap here to upload your PDF</span>
+    </label>
+    <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+
+    <div id="controls" class="hidden">
+      <div class="parts">
+        <button id="twoBtn">2 Parts</button>
+        <button id="threeBtn">3 Parts</button>
+      </div>
+      <div class="buttons">
+        <button id="previewBtn" class="primary">Preview Alignment</button>
+        <button id="downloadBtn" class="success" disabled>Download Reordered PDF</button>
+      </div>
+      <div id="status" class="status"></div>
+      <p class="note">
+        Rule: pages are divided as evenly as possible. If pages cannot be divided equally,
+        the extra pages go to the last part. Then pages are interleaved part-by-part.
+      </p>
+    </div>
+  </div>
+
+  <div id="previewCard" class="card hidden">
+    <h2>Preview</h2>
+    <div id="orderText" class="note"></div>
+    <div id="preview" class="preview"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script>
+  // PDF.js is loaded as an ES module below. pdf-lib is loaded separately.
+</script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+<script type="module">
+  import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+  const input = document.getElementById("pdfInput");
+  const fileName = document.getElementById("fileName");
+  const controls = document.getElementById("controls");
+  const twoBtn = document.getElementById("twoBtn");
+  const threeBtn = document.getElementById("threeBtn");
+  const previewBtn = document.getElementById("previewBtn");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const status = document.getElementById("status");
+  const previewCard = document.getElementById("previewCard");
+  const preview = document.getElementById("preview");
+  const orderText = document.getElementById("orderText");
+
+  let file = null;
+  let pdfDoc = null;
+  let parts = 2;
+  let reordered = [];
+  let pageImages = [];
+
+  function setParts(n) {
+    parts = n;
+    twoBtn.classList.toggle("active", n === 2);
+    threeBtn.classList.toggle("active", n === 3);
+    downloadBtn.disabled = true;
+    previewCard.classList.add("hidden");
+  }
+
+  twoBtn.onclick = () => setParts(2);
+  threeBtn.onclick = () => setParts(3);
+
+  input.onchange = async () => {
+    file = input.files[0];
+    if (!file) return;
+    fileName.textContent = file.name;
+    controls.classList.remove("hidden");
+    setParts(2);
+    status.textContent = "Loading PDF...";
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      pdfDoc = await pdfjsLib.getDocument({data}).promise;
+      status.textContent = `${pdfDoc.numPages} pages loaded. Choose 2 or 3 Parts.`;
+    } catch (e) {
+      status.textContent = "Could not read this PDF.";
+      console.error(e);
+    }
+  };
+
+  function buildOrder(total, count) {
+    // Divide into consecutive parts. Extra pages always go to the last part.
+    const base = Math.floor(total / count);
+    const sizes = Array(count).fill(base);
+    sizes[count - 1] += total % count;
+
+    const groups = [];
+    let start = 0;
+    for (const size of sizes) {
+      groups.push(Array.from({length: size}, (_, i) => start + i));
+      start += size;
+    }
+
+    const result = [];
+    const maxLen = Math.max(...groups.map(g => g.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const group of groups) {
+        if (i < group.length) result.push(group[i]);
+      }
+    }
+    return { result, groups };
+  }
+
+  function showOrder(order) {
+    return order.map(i => i + 1).join(" → ");
+  }
+
+  async function renderPage(pageNumber) {
+    const page = await pdfDoc.getPage(pageNumber + 1);
+    const viewport = page.getViewport({scale: 0.65});
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({canvasContext: canvas.getContext("2d"), viewport}).promise;
+    return canvas.toDataURL("image/jpeg", 0.82);
+  }
+
+  previewBtn.onclick = async () => {
+    if (!pdfDoc) return;
+    previewBtn.disabled = true;
+    downloadBtn.disabled = true;
+    status.textContent = "Creating aligned preview...";
+    try {
+      const built = buildOrder(pdfDoc.numPages, parts);
+      reordered = built.result;
+
+      orderText.textContent =
+        `New page order: ${showOrder(reordered)}.`;
+
+      preview.innerHTML = "";
+      pageImages = [];
+
+      for (let i = 0; i < reordered.length; i++) {
+        const originalIndex = reordered[i];
+        const imgSrc = await renderPage(originalIndex);
+        pageImages.push(imgSrc);
+
+        const card = document.createElement("div");
+        card.className = "page";
+        card.innerHTML = `
+          <img src="${imgSrc}" alt="Page ${originalIndex + 1}">
+          <div class="new">New Page ${i + 1}</div>
+          <div class="original">Original Page ${originalIndex + 1}</div>
+        `;
+        preview.appendChild(card);
+      }
+
+      previewCard.classList.remove("hidden");
+      downloadBtn.disabled = false;
+      status.textContent = `Preview ready: ${parts} parts aligned.`;
+    } catch (e) {
+      console.error(e);
+      status.textContent = "Could not create the preview.";
+    } finally {
+      previewBtn.disabled = false;
+    }
+  };
+
+  downloadBtn.onclick = async () => {
+    if (!file || !reordered.length) return;
+    downloadBtn.disabled = true;
+    status.textContent = "Creating new PDF...";
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const source = await PDFLib.PDFDocument.load(bytes);
+      const output = await PDFLib.PDFDocument.create();
+
+      const copied = await output.copyPages(source, reordered);
+      copied.forEach(p => output.addPage(p));
+
+      const outBytes = await output.save();
+      const blob = new Blob([outBytes], {type: "application/pdf"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reordered-aligned.pdf";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = "Download started.";
+    } catch (e) {
+      console.error(e);
+      status.textContent = "Could not create the reordered PDF.";
+    } finally {
+      downloadBtn.disabled = false;
+    }
+  };
+</script>
+</body>
+</html>
