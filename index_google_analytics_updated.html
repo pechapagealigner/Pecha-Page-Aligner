@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1b3e">
+<meta name="description" content="Pecha Aligner — arrange, align and preserve Pecha PDF pages directly in your browser.">
+<meta property="og:title" content="Pecha Aligner">
+<meta property="og:description" content="Arrange, align and preserve Pecha PDF pages locally in your browser.">
+<title>Pecha Aligner</title>
+
+<style>
+:root{
+  --navy:#0d1b3e;
+  --navy2:#152a58;
+  --blue:#1d5fd1;
+  --blue2:#2f7df0;
+  --gold:#d9a62e;
+  --gold2:#f4cf68;
+  --cream:#fffaf0;
+  --bg:#eef3f9;
+  --card:rgba(255,255,255,.94);
+  --text:#15213b;
+  --muted:#667085;
+  --border:#dce3ee;
+  --green:#16834b;
+  --red:#c43b3b;
+  --shadow:0 18px 55px rgba(12,28,58,.13);
+}
+
+*{box-sizing:border-box}
+
+html{scroll-behavior:smooth}
+
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:Inter,Segoe UI,Arial,sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(circle at 15% 0%,rgba(47,125,240,.13),transparent 28%),
+    radial-gradient(circle at 90% 5%,rgba(217,166,46,.14),transparent 24%),
+    linear-gradient(180deg,#f7f9fc 0%,var(--bg) 100%);
+}
+
+button,input{font:inherit}
+
+button{transition:.18s ease}
+
+.wrap{
+  width:min(1120px,calc(100% - 28px));
+  margin:auto;
+  padding:28px 0 48px;
+}
+
+/* HERO */
+.hero{
+  position:relative;
+  overflow:hidden;
+  border-radius:28px;
+  min-height:0;
+  background:transparent;
+  box-shadow:none;
+  margin-bottom:20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px;
+}
+
+.hero:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:transparent;
+  pointer-events:none;
+}
+
+.hero-logo{
+  position:relative;
+  z-index:1;
+  display:block;
+  width:min(760px,94%);
+  max-height:315px;
+  object-fit:contain;
+  filter:drop-shadow(0 14px 22px rgba(0,0,0,.30));
+}
+
+.badge{
+  position:absolute;
+  left:22px;
+  bottom:20px;
+  z-index:2;
+  padding:8px 13px;
+  border-radius:999px;
+  color:#fff;
+  background:rgba(8,18,43,.72);
+  border:1px solid rgba(244,207,104,.45);
+  backdrop-filter:blur(10px);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.5px;
+}
+
+/* MAIN CARD */
+.card{
+  background:var(--card);
+  border:1px solid rgba(220,227,238,.95);
+  border-radius:22px;
+  padding:22px;
+  box-shadow:0 10px 35px rgba(20,35,60,.08);
+  margin-bottom:18px;
+  backdrop-filter:blur(10px);
+}
+
+.section-title{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:16px;
+}
+
+.section-icon{
+  width:40px;
+  height:40px;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  color:#fff;
+  background:linear-gradient(135deg,var(--blue),var(--navy2));
+  font-weight:800;
+}
+
+.section-title h2{
+  margin:0;
+  font-size:20px;
+}
+
+.section-title p{
+  margin:3px 0 0;
+  color:var(--muted);
+  font-size:13px;
+}
+
+/* UPLOAD */
+.upload{
+  display:block;
+  border:2px dashed #b8c5d8;
+  border-radius:18px;
+  padding:30px 18px;
+  text-align:center;
+  cursor:pointer;
+  background:linear-gradient(180deg,#fcfdff,#f7f9fc);
+}
+
+.upload:hover,
+.upload.dragover{
+  border-color:var(--blue);
+  background:#f5f8ff;
+}
+
+.upload-icon{
+  width:56px;
+  height:56px;
+  margin:0 auto 12px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  background:#eaf1ff;
+  color:var(--blue);
+  font-size:27px;
+}
+
+.upload-title{
+  display:block;
+  font-weight:800;
+  font-size:17px;
+}
+
+.upload-file{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
+  word-break:break-word;
+}
+
+input[type=file]{display:none}
+
+/* CONTROLS */
+.controls{
+  margin-top:20px;
+  padding-top:20px;
+  border-top:1px solid var(--border);
+}
+
+.label{
+  font-size:13px;
+  font-weight:800;
+  margin-bottom:9px;
+  display:block;
+  color:#344054;
+}
+
+.parts{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+}
+
+.part{
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:13px 17px;
+  background:#f4f6fa;
+  color:#263142;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.part:hover{
+  transform:translateY(-1px);
+  border-color:#aebbd0;
+}
+
+.part.active{
+  color:#fff;
+  border-color:transparent;
+  background:linear-gradient(135deg,var(--blue),var(--blue2));
+  box-shadow:0 8px 20px rgba(29,95,209,.22);
+}
+
+.actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:13px;
+}
+
+.actions button{
+  border:0;
+  border-radius:12px;
+  padding:13px 17px;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.primary{
+  color:#fff;
+  background:linear-gradient(135deg,var(--blue),var(--blue2));
+}
+
+.success{
+  color:#fff;
+  background:linear-gradient(135deg,#137747,#1aa15d);
+}
+
+.actions button:not(:disabled):hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 20px rgba(20,40,70,.15);
+}
+
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.status{
+  min-height:22px;
+  margin-top:13px;
+  font-size:13px;
+  color:var(--muted);
+}
+
+.status.ok{color:var(--green);font-weight:700}
+.status.error{color:var(--red);font-weight:700}
+
+.note{
+  margin:10px 0 0;
+  font-size:12px;
+  line-height:1.55;
+  color:var(--muted);
+}
+
+/* PREVIEW */
+.preview-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-end;
+}
+
+.preview-head h2{
+  font-size:20px;
+  margin:0;
+}
+
+.order{
+  margin-top:7px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+  word-break:break-word;
+}
+
+.preview{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(145px,1fr));
+  gap:14px;
+  margin-top:17px;
+}
+
+.page{
+  position:relative;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:transparent;
+  padding:0;
+  text-align:center;
+  overflow:visible;
+}
+
+.page img{
+  width:100%;
+  height:auto;
+  object-fit:contain;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:5px;
+  display:block;
+}
+
+.new{
+  font-weight:850;
+  font-size:13px;
+  margin-top:8px;
+}
+
+.original{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:3px;
+}
+
+.number{
+  position:absolute;
+  top:6px;
+  left:6px;
+  min-width:32px;
+  height:19px;
+  padding:0 5px;
+  border-radius:5px;
+  display:grid;
+  place-items:center;
+  background:rgba(13,27,62,.86);
+  color:#fff;
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+}
+
+/* INFO */
+.info-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+}
+
+.info{
+  padding:15px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fafbfc;
+}
+
+.info strong{
+  display:block;
+  font-size:13px;
+  margin-bottom:5px;
+}
+
+.info span{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+}
+
+footer{
+  text-align:center;
+  color:#8994a6;
+  font-size:11px;
+  margin-top:24px;
+}
+
+/* LOADING */
+.loading{
+  display:inline-block;
+  width:14px;
+  height:14px;
+  border:2px solid currentColor;
+  border-right-color:transparent;
+  border-radius:50%;
+  vertical-align:-2px;
+  margin-right:6px;
+  animation:spin .7s linear infinite;
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.hidden{display:none!important}
+
+@media(max-width:700px){
+  .wrap{
+    width:min(100% - 16px,1120px);
+    padding-top:12px;
+  }
+
+  .hero{
+    min-height:0;
+    border-radius:0;
+    padding:4px;
+  }
+
+  .hero-logo{
+    width:100%;
+    max-height:225px;
+  }
+
+  .badge{
+    left:12px;
+    bottom:12px;
+    font-size:10px;
+  }
+
+  .card{
+    padding:15px;
+    border-radius:17px;
+  }
+
+  .actions,
+  .info-grid{
+    grid-template-columns:1fr;
+  }
+
+  .parts{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .preview{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+  }
+
+  .page img{
+    height:auto;
+  }
+}
+
+/* Enlarged single-page preview: keeps each PDF page's original aspect ratio. */
+.page.zoomable{cursor:zoom-in;}
+.page-preview-modal{
+  position:fixed; inset:0; z-index:9999;
+  display:none; align-items:center; justify-content:center;
+  padding:24px; box-sizing:border-box;
+  background:rgba(5,10,24,.88);
+  backdrop-filter:blur(5px);
+}
+.page-preview-modal.open{display:flex;}
+.page-preview-stage{
+  max-width:92vw; max-height:92vh;
+  display:flex; align-items:center; justify-content:center;
+  cursor:zoom-out;
+}
+.page-preview-stage img{
+  display:block;
+  max-width:92vw; max-height:92vh;
+  width:auto; height:auto;
+  object-fit:contain;
+  background:#fff;
+  border-radius:6px;
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+}
+.page-preview-hint{
+  position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+  color:#fff; font-size:12px; opacity:.82; pointer-events:none;
+}
+
+</style>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MCRBJX8Y62"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-MCRBJX8Y62');
+</script>
+</head>
+
+<body>
+<div class="wrap">
+
+  <section class="card">
+    <div class="section-title">
+      <div class="section-icon">PDF</div>
+      <div>
+        <h2>Pecha PDF Alignment</h2>
+        <p>Upload your PDF and arrange the pages automatically.</p>
+      </div>
+    </div>
+
+    <label class="upload" id="dropZone" for="pdfInput">
+      <div class="upload-icon">↑</div>
+      <span class="upload-title">Choose PDF</span>
+      <span id="fileName" class="upload-file">Click here or drag & drop a PDF from your computer</span>
+    </label>
+
+    <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+
+    <div id="controls" class="controls hidden">
+      <span class="label">Choose alignment</span>
+
+      <div class="parts">
+        <button id="twoBtn" class="part active" type="button">2 Parts</button>
+        <button id="threeBtn" class="part" type="button">3 Parts</button>
+        <button id="fourBtn" class="part" type="button">4 Parts</button>
+        <button id="fiveBtn" class="part" type="button">5 Parts</button>
+        <button id="sixBtn" class="part" type="button">6 Parts</button>
+      </div>
+
+      <div class="actions">
+        <button id="previewBtn" class="primary" type="button">Preview Alignment</button>
+        <button id="downloadBtn" class="success" type="button" disabled>Download PDF</button>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <p class="note">
+        Pages are divided consecutively. If the total cannot be divided equally,
+        the extra pages go to the last part. The parts are then aligned page-by-page.
+        Everything is processed locally in your browser.
+      </p>
+    </div>
+  </section>
+
+  <section id="previewCard" class="card hidden">
+    <div class="preview-head">
+      <div>
+        <h2>Preview</h2>
+        <div id="orderText" class="order"></div>
+      </div>
+    </div>
+    <div id="preview" class="preview"></div>
+  </section>
+<div id="pagePreviewModal" class="page-preview-modal" aria-hidden="true">
+  <div id="pagePreviewStage" class="page-preview-stage">
+    <img id="pagePreviewImage" alt="Enlarged PDF page preview">
+  </div>
+  <div class="page-preview-hint">Double-click to go back</div>
+</div>
+
+  <footer>By མོས་གུས།</footer>
+</div>
+
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+
+const input = document.getElementById("pdfInput");
+const dropZone = document.getElementById("dropZone");
+const fileName = document.getElementById("fileName");
+const controls = document.getElementById("controls");
+const twoBtn = document.getElementById("twoBtn");
+const threeBtn = document.getElementById("threeBtn");
+const fourBtn = document.getElementById("fourBtn");
+const fiveBtn = document.getElementById("fiveBtn");
+const sixBtn = document.getElementById("sixBtn");
+const previewBtn = document.getElementById("previewBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const status = document.getElementById("status");
+const previewCard = document.getElementById("previewCard");
+const preview = document.getElementById("preview");
+const pagePreviewModal = document.getElementById("pagePreviewModal");
+const pagePreviewStage = document.getElementById("pagePreviewStage");
+const pagePreviewImage = document.getElementById("pagePreviewImage");
+const orderText = document.getElementById("orderText");
+
+let file = null;
+let pdfDoc = null;
+let parts = 2;
+let reordered = [];
+
+function setStatus(text, type = "") {
+  status.innerHTML = text;
+  status.className = "status " + type;
+}
+
+function setParts(n) {
+  parts = n;
+  twoBtn.classList.toggle("active", n === 2);
+  threeBtn.classList.toggle("active", n === 3);
+  fourBtn.classList.toggle("active", n === 4);
+  fiveBtn.classList.toggle("active", n === 5);
+  sixBtn.classList.toggle("active", n === 6);
+  downloadBtn.disabled = true;
+  previewCard.classList.add("hidden");
+  preview.innerHTML = "";
+  reordered = [];
+}
+
+function buildOrder(total, count) {
+  const base = Math.floor(total / count);
+  const sizes = Array(count).fill(base);
+  sizes[count - 1] += total % count;
+
+  const groups = [];
+  let start = 0;
+
+  for (const size of sizes) {
+    groups.push(Array.from({ length: size }, (_, i) => start + i));
+    start += size;
+  }
+
+  const result = [];
+  const maxLen = Math.max(...groups.map(g => g.length));
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const group of groups) {
+      if (i < group.length) result.push(group[i]);
+    }
+  }
+
+  return result;
+}
+
+function showFile(fileObj) {
+  if (!fileObj) return;
+
+  if (fileObj.type !== "application/pdf" &&
+      !fileObj.name.toLowerCase().endsWith(".pdf")) {
+    setStatus("Please choose a PDF file.", "error");
+    return;
+  }
+
+  file = fileObj;
+  fileName.textContent = file.name;
+  controls.classList.remove("hidden");
+  setParts(2);
+  loadPDF();
+}
+
+async function loadPDF() {
+  setStatus('<span class="loading"></span>Loading PDF...');
+
+  try {
+    const data = new Uint8Array(await file.arrayBuffer());
+    pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+
+    setStatus(
+      `${pdfDoc.numPages} pages loaded. Choose 2, 3, 4, 5 or 6 Parts.`,
+      "ok"
+    );
+  } catch (e) {
+    console.error(e);
+    pdfDoc = null;
+    setStatus("Could not read this PDF. Please choose another PDF.", "error");
+  }
+}
+
+async function renderPage(index) {
+  const page = await pdfDoc.getPage(index + 1);
+  const viewport = page.getViewport({ scale: 0.65 });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+
+  await page.render({
+    canvasContext: canvas.getContext("2d"),
+    viewport
+  }).promise;
+
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function openPagePreview(src, alt) {
+  pagePreviewImage.src = src;
+  pagePreviewImage.alt = alt || "Enlarged PDF page preview";
+  pagePreviewModal.classList.add("open");
+  pagePreviewModal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closePagePreview() {
+  pagePreviewModal.classList.remove("open");
+  pagePreviewModal.setAttribute("aria-hidden", "true");
+  pagePreviewImage.removeAttribute("src");
+  document.body.style.overflow = "";
+}
+
+pagePreviewModal.addEventListener("dblclick", closePagePreview);
+pagePreviewModal.addEventListener("click", (event) => {
+  if (event.target === pagePreviewModal) closePagePreview();
+});
+
+async function createPreview() {
+  if (!pdfDoc) {
+    setStatus("Please choose a PDF first.", "error");
+    return;
+  }
+
+  previewBtn.disabled = true;
+  downloadBtn.disabled = true;
+  preview.innerHTML = "";
+  previewCard.classList.remove("hidden");
+
+  try {
+    reordered = buildOrder(pdfDoc.numPages, parts);
+
+    orderText.textContent =
+      "New order: " + reordered.map(i => i + 1).join(" → ");
+
+    setStatus('<span class="loading"></span>Creating preview...');
+
+    const fragment = document.createDocumentFragment();
+
+    for (let i = 0; i < reordered.length; i++) {
+      const originalIndex = reordered[i];
+      const imgSrc = await renderPage(originalIndex);
+
+      const box = document.createElement("div");
+      box.className = "page zoomable";
+
+      const number = document.createElement("div");
+      number.className = "number";
+      number.textContent = `${i + 1} / ${pdfDoc.numPages}`;
+
+      const img = document.createElement("img");
+      img.src = imgSrc;
+      img.alt = `New page ${i + 1}`;
+
+      const newLabel = document.createElement("div");
+      newLabel.className = "new";
+      newLabel.textContent = `New Page ${i + 1}`;
+
+      const originalLabel = document.createElement("div");
+      originalLabel.className = "original";
+      originalLabel.textContent = `Original Page ${originalIndex + 1}`;
+
+      box.append(number, img, newLabel, originalLabel);
+      box.addEventListener("dblclick", () => openPagePreview(img.src, img.alt));
+      fragment.appendChild(box);
+    }
+
+    preview.appendChild(fragment);
+    downloadBtn.disabled = false;
+    setStatus("Preview ready. You can now download the aligned PDF.", "ok");
+
+    previewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    console.error(e);
+    setStatus("Could not create the preview.", "error");
+  } finally {
+    previewBtn.disabled = false;
+  }
+}
+
+async function downloadPDF() {
+  if (!file || !reordered.length) return;
+
+  downloadBtn.disabled = true;
+  previewBtn.disabled = true;
+  setStatus('<span class="loading"></span>Creating your aligned PDF...');
+
+  try {
+    const sourceBytes = await file.arrayBuffer();
+    const sourcePdf = await PDFLib.PDFDocument.load(sourceBytes);
+    const outputPdf = await PDFLib.PDFDocument.create();
+
+    const copiedPages = await outputPdf.copyPages(sourcePdf, reordered);
+
+    copiedPages.forEach(page => outputPdf.addPage(page));
+
+    const bytes = await outputPdf.save();
+
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    const baseName = file.name.replace(/\.pdf$/i, "");
+    a.href = url;
+    a.download = `${baseName}_aligned_${parts}_parts.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    setStatus("PDF downloaded successfully.", "ok");
+  } catch (e) {
+    console.error(e);
+    setStatus("Could not create the PDF. Please try again.", "error");
+  } finally {
+    downloadBtn.disabled = false;
+    previewBtn.disabled = false;
+  }
+}
+
+twoBtn.addEventListener("click", () => setParts(2));
+threeBtn.addEventListener("click", () => setParts(3));
+fourBtn.addEventListener("click", () => setParts(4));
+fiveBtn.addEventListener("click", () => setParts(5));
+sixBtn.addEventListener("click", () => setParts(6));
+previewBtn.addEventListener("click", createPreview);
+downloadBtn.addEventListener("click", downloadPDF);
+
+input.addEventListener("change", e => {
+  showFile(e.target.files[0]);
+});
+
+["dragenter", "dragover"].forEach(eventName => {
+  dropZone.addEventListener(eventName, e => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+});
+
+["dragleave", "drop"].forEach(eventName => {
+  dropZone.addEventListener(eventName, e => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+  });
+});
+
+dropZone.addEventListener("drop", e => {
+  const droppedFile = e.dataTransfer.files[0];
+  showFile(droppedFile);
+});
+</script>
+</body>
+</html>
