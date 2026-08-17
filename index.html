@@ -867,3 +867,179 @@ if ('serviceWorker' in navigator) {
 <script type="module" src="/index.tsx"></script>
 </body>
 </html>
+<div class="upload-zone" id="dropZone">
+  <div class="upload-icon">📄</div>
+  <div class="upload-text-main">Drag & Drop Pecha PDF here or Click to Browse</div>
+  <div class="upload-text-sub">Supports single or multi-volume Pecha scans</div>
+  <input type="file" id="fileInput" accept="application/pdf" style="display:none;">
+  <div id="uploadedFileInfo" class="file-info-badge"></div>
+</div>
+<!-- 1. Page Reordering & Visual Grid -->
+<section class="card">
+  <div class="card-title">
+    <div>
+      <h2>📑 Page Visual Grid & Drag-and-Drop Reorder</h2>
+      <p>Drag pages to reorder, exclude blanks, or remove damaged scan pages</p>
+    </div>
+    <div class="toolbar-btn-group">
+      <button class="btn-sm" id="selectAllPagesBtn">Select All</button>
+      <button class="btn-sm" id="deselectAllPagesBtn">Deselect All</button>
+      <button class="btn-sm" id="reverseOrderBtn">🔄 Reverse Order</button>
+    </div>
+  </div>
+
+  <div class="thumbnail-container" id="pageThumbnailsGrid">
+    <!-- Thumbnails generated dynamically -->
+  </div>
+</section>
+
+<!-- 2. Controls & Live Preview Grid -->
+<div class="grid-2col">
+  <!-- Left: Settings Panel -->
+  <div class="card">
+    <div class="card-title">
+      <h2>📐 Pecha Dimensions & Presets</h2>
+    </div>
+
+    <!-- Presets -->
+    <div class="control-group">
+      <label class="control-label">Standard Format Presets</label>
+      <select id="presetSelect" class="form-control">
+        <option value="traditional-long">Traditional Long Pecha (320 × 75 mm)</option>
+        <option value="standard-pecha" selected>Standard Modern Pecha (297 × 80 mm)</option>
+        <option value="a4-pecha-half">A4 Split Pecha (297 × 105 mm)</option>
+        <option value="pocket-pecha">Pocket Dpe-cha (210 × 65 mm)</option>
+        <option value="a4-landscape">A4 Full Landscape (297 × 210 mm)</option>
+        <option value="a4-portrait">A4 Full Portrait (210 × 297 mm)</option>
+        <option value="custom">Custom Dimensions</option>
+      </select>
+    </div>
+
+    <div class="control-group input-row">
+      <div>
+        <label class="control-label">Width (mm)</label>
+        <input type="number" id="targetWidth" class="form-control" value="297" step="1">
+      </div>
+      <div>
+        <label class="control-label">Height (mm)</label>
+        <input type="number" id="targetHeight" class="form-control" value="80" step="1">
+      </div>
+      <div>
+        <label class="control-label">Orientation</label>
+        <select id="orientationSelect" class="form-control">
+          <option value="landscape">Landscape</option>
+          <option value="portrait">Portrait</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Margins -->
+    <div class="control-group" style="margin-top:20px;">
+      <div class="card-title" style="margin-bottom:8px;">
+        <h2>📏 Margins (mm)</h2>
+      </div>
+      <div class="input-row">
+        <div>
+          <label class="control-label">Top</label>
+          <input type="number" id="marginTop" class="form-control" value="5" step="0.5">
+        </div>
+        <div>
+          <label class="control-label">Bottom</label>
+          <input type="number" id="marginBottom" class="form-control" value="5" step="0.5">
+        </div>
+        <div>
+          <label class="control-label">Left (Recto)</label>
+          <input type="number" id="marginLeft" class="form-control" value="6" step="0.5">
+        </div>
+        <div>
+          <label class="control-label">Right (Recto)</label>
+          <input type="number" id="marginRight" class="form-control" value="6" step="0.5">
+        </div>
+      </div>
+    </div>
+
+    <!-- Even / Odd (Recto / Verso) Alignment Feature -->
+    <div class="control-group" style="margin-top:16px; padding:14px; background:#f8fafc; border-radius:12px; border:1px solid var(--border);">
+      <label class="switch-label">
+        <input type="checkbox" id="enableEvenOdd">
+        <span>📖 Different Even / Odd Margins (Recto / Verso Gutter)</span>
+      </label>
+      <div id="evenOddMarginContainer" style="display:none; margin-top:12px;" class="input-row">
+        <div>
+          <label class="control-label">Even Left (Verso mm)</label>
+          <input type="number" id="evenMarginLeft" class="form-control" value="10" step="0.5">
+        </div>
+        <div>
+          <label class="control-label">Even Right (Verso mm)</label>
+          <input type="number" id="evenMarginRight" class="form-control" value="5" step="0.5">
+        </div>
+      </div>
+    </div>
+
+    <!-- Smart Auto-Crop Scanner Borders -->
+    <div class="control-group" style="margin-top:14px; padding:14px; background:#f8fafc; border-radius:12px; border:1px solid var(--border);">
+      <label class="switch-label">
+        <input type="checkbox" id="autoCropBlackBorders">
+        <span>✂️ Auto-Detect & Trim Black Scanner Borders</span>
+      </label>
+      <div style="margin-top:8px;">
+        <label class="control-label" style="font-size:12px; font-weight:normal;">
+          Black Threshold: <b id="cropThresholdVal">35</b>
+        </label>
+        <input type="range" id="cropThreshold" min="10" max="100" value="35" style="width:100%;">
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Live Canvas Preview & Comparison Overlay -->
+  <div class="card">
+    <div class="card-title">
+      <div>
+        <h2>👁️ Live Folio Preview</h2>
+        <p id="pageIndicator">Page 1 of 1</p>
+      </div>
+    </div>
+
+    <div class="preview-container">
+      <canvas id="previewCanvas" class="preview-canvas"></canvas>
+    </div>
+
+    <div class="preview-toolbar">
+      <div>
+        <button class="btn-secondary" id="prevPageBtn">◀ Previous</button>
+        <button class="btn-secondary" id="nextPageBtn">Next ▶</button>
+      </div>
+
+      <!-- Overlay Comparison Mode -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label class="switch-label" style="font-size:12px;">
+          <input type="checkbox" id="enableOverlayMode">
+          <span>🔍 Overlay Compare</span>
+        </label>
+        <div id="overlayOpacityControl" style="display:none; align-items:center; gap:4px;">
+          <input type="range" id="overlayOpacity" min="0.1" max="0.9" step="0.1" value="0.5" style="width:70px;">
+          <small id="opacityVal">50%</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Processing Panel (if batch files uploaded) -->
+<div class="card" id="batchProcessingSection" style="display:none;">
+  <div class="card-title">
+    <h2>⚡ Batch Processing Queue</h2>
+    <button class="btn-primary" id="exportBatchBtn">⚡ Export All Batch PDFs</button>
+  </div>
+  <div class="batch-list" id="batchFileList"></div>
+</div>
+
+<!-- Export Action Bar -->
+<div class="card" style="text-align:center; padding:28px;">
+  <button class="btn-primary" id="exportPdfBtn" style="font-size:18px; padding:16px 36px;">
+    💾 Download Aligned Pecha PDF
+  </button>
+  <p style="color:var(--muted); font-size:13px; margin-top:8px;">
+    High-fidelity vector PDF exported instantly in your browser.
+  </p>
+</div>
