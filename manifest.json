@@ -1,0 +1,25 @@
+{
+  "name": "Pecha PDF Alignment",
+  "short_name": "Pecha PDF",
+  "description": "Arrange, align and preserve Pecha PDF pages directly in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef3f9",
+  "theme_color": "#0d1b3e",
+  "icons": [
+    {
+      "src": "./icon-192.png?v=2",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
