@@ -1,6 +1,0 @@
-{
-  "name": "Pecha PDF Aligner",
-  "description": "Comprehensive Pecha alignment, reordering, duplex-scan fixing, folio splitting, Tibetan/English numbering, rotation, and high-res export tool.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
