@@ -625,28 +625,48 @@ function setParts(n) {
 }
 
 function buildOrder(total, count) {
+  /* Tibetan-long / Pecha duplex imposition.
+   * Front = first row of each group, left-to-right.
+   * Back  = second row of each group, right-to-left.
+   * No blank PDF pages are invented.
+   *
+   * 2 / 10: 1,6,7,2,3,8,9,4,5,10
+   * 3 / 12: 1,5,9,10,6,2,3,7,11,12,8,4
+   * 4 / 16: 1,5,9,13,14,10,6,2,3,7,11,15,16,12,8,4
+   * 5 / 20: 1,5,9,13,17,18,14,10,6,2,3,7,11,15,19,20,16,12,8,4
+   * 6 / 24: 1,5,9,13,17,21,22,18,14,10,6,2,3,7,11,15,19,23,24,20,16,12,8,4
+   */
+  if (!Number.isInteger(total) || total <= 0) return [];
+  if (!Number.isInteger(count) || count < 2 || count > 6) return [];
+
   const base = Math.floor(total / count);
   const sizes = Array(count).fill(base);
   sizes[count - 1] += total % count;
 
   const groups = [];
   let start = 0;
-
   for (const size of sizes) {
     groups.push(Array.from({ length: size }, (_, i) => start + i));
     start += size;
   }
 
   const result = [];
-  const maxLen = Math.max(...groups.map(g => g.length));
+  const maxLen = Math.max(...groups.map(group => group.length));
 
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of groups) {
-      if (i < group.length) result.push(group[i]);
+  for (let row = 0; row < maxLen; row += 2) {
+    // FRONT: normal left-to-right group order.
+    for (let g = 0; g < groups.length; g++) {
+      if (row < groups[g].length) result.push(groups[g][row]);
+    }
+
+    // BACK: reverse right-to-left group order.
+    for (let g = groups.length - 1; g >= 0; g--) {
+      if (row + 1 < groups[g].length) result.push(groups[g][row + 1]);
     }
   }
 
-  return result;
+  // Only real source pages are returned; no null/blank page is added.
+  return result.filter(index => index >= 0 && index < total);
 }
 
 function showFile(fileObj) {
