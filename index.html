@@ -547,8 +547,8 @@ footer{
       <div id="status" class="status"></div>
 
       <p class="note">
-        Pages are divided consecutively. If the total cannot be divided equally,
-        the extra pages go to the last part. The parts are then aligned page-by-page.
+        Pages are divided into consecutive parts while keeping duplex page-pairs together.
+        Front positions are normal and back positions are reversed. Automatic blank positions are added only where a physical A4 slot is unused. Everything is processed locally in your browser.
         Everything is processed locally in your browser.
       </p>
     </div>
@@ -626,22 +626,36 @@ function setParts(n) {
 
 function buildOrder(total, count) {
   /* Tibetan-long / Pecha duplex imposition.
-   * Front = first row of each group, left-to-right.
-   * Back  = second row of each group, right-to-left.
-   * No blank PDF pages are invented.
    *
-   * 2 / 10: 1,6,7,2,3,8,9,4,5,10
-   * 3 / 12: 1,5,9,10,6,2,3,7,11,12,8,4
-   * 4 / 16: 1,5,9,13,14,10,6,2,3,7,11,15,16,12,8,4
-   * 5 / 20: 1,5,9,13,17,18,14,10,6,2,3,7,11,15,19,20,16,12,8,4
-   * 6 / 24: 1,5,9,13,17,21,22,18,14,10,6,2,3,7,11,15,19,23,24,20,16,12,8,4
+   * Every physical long-page position keeps a consecutive duplex pair:
+   *   1/2, 3/4, 5/6, 7/8, ...
+   *
+   * Front  = first page of each pair, left-to-right.
+   * Back   = second page of each pair, right-to-left.
+   *
+   * Parts are consecutive blocks. Block sizes are kept even whenever
+   * possible, so an internal page can never be left with a blank back.
+   * If the PDF has an incomplete physical sheet, BLANK placeholders are
+   * inserted automatically at the unused positions. These blanks are not
+   * source pages; they only preserve the correct duplex/cutting geometry.
    */
   if (!Number.isInteger(total) || total <= 0) return [];
   if (!Number.isInteger(count) || count < 2 || count > 6) return [];
 
-  const base = Math.floor(total / count);
+  // Keep the consecutive parts as balanced as possible while making all
+  // non-final parts even. For an odd total, only the final part is odd.
+  const base = 2 * Math.floor(total / (2 * count));
+  const remainder = total - base * count;
   const sizes = Array(count).fill(base);
-  sizes[count - 1] += total % count;
+
+  if (remainder % 2 === 0) {
+    const extraParts = remainder / 2;
+    for (let i = count - extraParts; i < count; i++) sizes[i] += 2;
+  } else {
+    sizes[count - 1] += 1;
+    const extraParts = (remainder - 1) / 2;
+    for (let i = count - 1 - extraParts; i < count - 1; i++) sizes[i] += 2;
+  }
 
   const groups = [];
   let start = 0;
@@ -653,20 +667,21 @@ function buildOrder(total, count) {
   const result = [];
   const maxLen = Math.max(...groups.map(group => group.length));
 
+  // One loop = one physical A4 sheet: count FRONT slots followed by
+  // count BACK slots. null means an automatically generated blank page.
   for (let row = 0; row < maxLen; row += 2) {
-    // FRONT: normal left-to-right group order.
-    for (let g = 0; g < groups.length; g++) {
-      if (row < groups[g].length) result.push(groups[g][row]);
+    // FRONT: normal left-to-right order.
+    for (let g = 0; g < count; g++) {
+      result.push(row < groups[g].length ? groups[g][row] : null);
     }
 
-    // BACK: reverse right-to-left group order.
-    for (let g = groups.length - 1; g >= 0; g--) {
-      if (row + 1 < groups[g].length) result.push(groups[g][row + 1]);
+    // BACK: reverse the column positions.
+    for (let g = count - 1; g >= 0; g--) {
+      result.push(row + 1 < groups[g].length ? groups[g][row + 1] : null);
     }
   }
 
-  // Only real source pages are returned; no null/blank page is added.
-  return result.filter(index => index >= 0 && index < total);
+  return result;
 }
 
 function showFile(fileObj) {
@@ -754,7 +769,7 @@ async function createPreview() {
     reordered = buildOrder(pdfDoc.numPages, parts);
 
     orderText.textContent =
-      "New order: " + reordered.map(i => i + 1).join(" → ");
+      "New order: " + reordered.map(i => i === null ? "BLANK" : i + 1).join(" → ");
 
     setStatus('<span class="loading"></span>Creating preview...');
 
@@ -762,18 +777,24 @@ async function createPreview() {
 
     for (let i = 0; i < reordered.length; i++) {
       const originalIndex = reordered[i];
-      const imgSrc = await renderPage(originalIndex);
 
       const box = document.createElement("div");
       box.className = "page zoomable";
 
       const number = document.createElement("div");
       number.className = "number";
-      number.textContent = `${i + 1} / ${pdfDoc.numPages}`;
+      number.textContent = `${i + 1} / ${reordered.length}`;
 
       const img = document.createElement("img");
-      img.src = imgSrc;
-      img.alt = `New page ${i + 1}`;
+      if (originalIndex === null) {
+        img.src = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="white"/><rect x="2" y="2" width="596" height="396" fill="none" stroke="#cfd6df"/><text x="300" y="205" text-anchor="middle" font-family="Arial" font-size="28" fill="#7a8491">BLANK</text></svg>`
+        );
+        img.alt = `Automatic blank position ${i + 1}`;
+      } else {
+        img.src = await renderPage(originalIndex);
+        img.alt = `New page ${i + 1}`;
+      }
 
       const newLabel = document.createElement("div");
       newLabel.className = "new";
@@ -781,10 +802,14 @@ async function createPreview() {
 
       const originalLabel = document.createElement("div");
       originalLabel.className = "original";
-      originalLabel.textContent = `Original Page ${originalIndex + 1}`;
+      originalLabel.textContent = originalIndex === null
+        ? "Automatic Blank Position"
+        : `Original Page ${originalIndex + 1}`;
 
       box.append(number, img, newLabel, originalLabel);
-      box.addEventListener("dblclick", () => openPagePreview(img.src, img.alt));
+      if (originalIndex !== null) {
+        box.addEventListener("dblclick", () => openPagePreview(img.src, img.alt));
+      }
       fragment.appendChild(box);
     }
 
@@ -813,9 +838,16 @@ async function downloadPDF() {
     const sourcePdf = await PDFLib.PDFDocument.load(sourceBytes);
     const outputPdf = await PDFLib.PDFDocument.create();
 
-    const copiedPages = await outputPdf.copyPages(sourcePdf, reordered);
+    const sourceSize = sourcePdf.getPage(0).getSize();
 
-    copiedPages.forEach(page => outputPdf.addPage(page));
+    for (const originalIndex of reordered) {
+      if (originalIndex === null) {
+        outputPdf.addPage([sourceSize.width, sourceSize.height]);
+      } else {
+        const [copiedPage] = await outputPdf.copyPages(sourcePdf, [originalIndex]);
+        outputPdf.addPage(copiedPage);
+      }
+    }
 
     const bytes = await outputPdf.save();
 
