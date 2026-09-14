@@ -659,7 +659,7 @@ footer{
       <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
 
       <div id="printStatus" class="status"></div>
-      <p class="note">Pages are placed vertically in their original PDF form. The downloaded PDF does not rasterize or JPEG-compress the source pages. Pages stay at original size whenever they fit the selected sheet; only pages that cannot physically fit are proportionally reduced.</p>
+      <p class="note">Pages are placed vertically in their original PDF form. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
       <div id="printPreview" class="print-preview-grid"></div>
     </div>
   </section>
@@ -1064,7 +1064,8 @@ dropZone.addEventListener("drop", e => {
   }
 
   async function makePlan(){
-    if(!pDoc)return [];
+    if(!pDoc) return {ok:false, plan:[], issue:null};
+
     const first=await pDoc.getPage(1);
     const firstVp=first.getViewport({scale:1});
     const [sheetW,sheetH]=getSheetSize(firstVp.width,firstVp.height);
@@ -1079,26 +1080,56 @@ dropZone.addEventListener("drop", e => {
       const pg=await pDoc.getPage(i+1);
       const vp=pg.getViewport({scale:1});
       const srcW=vp.width,srcH=vp.height;
-      let scale=1;
-      if(srcW>usableW) scale=Math.min(scale,usableW/srcW);
-      if(srcH>usableH) scale=Math.min(scale,usableH/srcH);
-      const drawW=srcW*scale,drawH=srcH*scale;
-      const needed=sheet.length ? GAP_PT+drawH : drawH;
+
+      // IMPORTANT: Never resize the source page. It must fit at exactly 100%.
+      if(srcW > usableW + 0.01 || srcH > usableH + 0.01){
+        const sheetName=pSize;
+        const orientation=(sheetW > sheetH) ? 'Landscape' : 'Portrait';
+        const pageWmm=srcW / MM_PT;
+        const pageHmm=srcH / MM_PT;
+        const usableWmm=usableW / MM_PT;
+        const usableHmm=usableH / MM_PT;
+        return {
+          ok:false,
+          plan:[],
+          issue:{
+            page:i+1,
+            pageWmm,
+            pageHmm,
+            sheetName,
+            orientation,
+            usableWmm,
+            usableHmm,
+            sheetWmm:sheetW/MM_PT,
+            sheetHmm:sheetH/MM_PT,
+            marginMm:Number(pMargin.value)
+          }
+        };
+      }
+
+      const needed=sheet.length ? GAP_PT+srcH : srcH;
 
       if(sheet.length && usedH+needed>usableH+0.01){
         plan.push({items:sheet,sheetW,sheetH,margin});
         sheet=[];usedH=0;
       }
-      sheet.push({index:i,scale,drawW,drawH,srcW,srcH,scaled:scale<0.99999});
-      usedH += sheet.length===1 ? drawH : GAP_PT+drawH;
+
+      sheet.push({index:i,scale:1,drawW:srcW,drawH:srcH,srcW,srcH,scaled:false});
+      usedH += sheet.length===1 ? srcH : GAP_PT+srcH;
     }
+
     if(sheet.length)plan.push({items:sheet,sheetW,sheetH,margin});
-    return plan;
+    return {ok:true,plan,issue:null};
   }
 
   async function buildPrintPdf(){
     if(!pFile||!pDoc)return null;
-    pPlan=await makePlan();
+    const result=await makePlan();
+    if(!result.ok){
+      pPlan=[];
+      return {error:result.issue};
+    }
+    pPlan=result.plan;
     const src=await PDFLib.PDFDocument.load(await pFile.arrayBuffer());
     const out=await PDFLib.PDFDocument.create();
     const embedded=[];
@@ -1162,11 +1193,17 @@ dropZone.addEventListener("drop", e => {
     pPreviewBtn.disabled=true;pDownload.disabled=true;pSetStatus('<span class="loading"></span>Creating print layout preview...');
     try{
       const out=await buildPrintPdf();
+      if(out && out.error){
+        const x=out.error;
+        pPreview.innerHTML='';
+        pDownload.disabled=true;
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm. The page will <strong>not</strong> be resized. Please choose a larger paper size/orientation or use a smaller-margin setting.`,'error');
+        return;
+      }
       const bytes=await out.save({useObjectStreams:false});
       await renderPreview(bytes);
-      const scaled=pPlan.flatMap(s=>s.items).filter(i=>i.scaled).length;
       pDownload.disabled=false;
-      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${scaled?` ${scaled} page${scaled===1?' was':'s were'} proportionally reduced to fit.`:''}`,'ok');
+      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created. All source pages remain at their exact original size (100%).`,'ok');
     }catch(e){console.error(e);pSetStatus('Could not create the printing layout preview.','error');}
     finally{pPreviewBtn.disabled=false;}
   });
@@ -1176,11 +1213,15 @@ dropZone.addEventListener("drop", e => {
     pDownload.disabled=true;pPreviewBtn.disabled=true;pSetStatus('<span class="loading"></span>Creating print-ready PDF...');
     try{
       const out=await buildPrintPdf();
+      if(out && out.error){
+        const x=out.error;
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Please choose a larger paper size/orientation or use a smaller-margin setting.`,'error');
+        return;
+      }
       const bytes=await out.save({useObjectStreams:false});
       const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
       const a=document.createElement('a');a.href=url;a.download=pFile.name.replace(/\.pdf$/i,'')+`_printing_${pSize}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-      const scaled=pPlan.flatMap(s=>s.items).filter(i=>i.scaled).length;
-      pSetStatus(`PDF downloaded successfully. Original PDF pages were embedded directly without JPEG/image conversion.${scaled?' Pages that could not fit at 100% were proportionally reduced.':''}`,'ok');
+      pSetStatus(`PDF downloaded successfully. Original PDF pages were embedded directly at their exact original size without JPEG/image conversion or resizing.`,'ok');
     }catch(e){console.error(e);pSetStatus('Could not create the printing PDF.','error');}
     finally{pDownload.disabled=false;pPreviewBtn.disabled=false;}
   });
