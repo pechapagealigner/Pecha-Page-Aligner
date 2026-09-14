@@ -509,6 +509,25 @@ footer{
 #toolChoice .actions button{min-height:54px;font-size:15px;}
 #printingTool .section-title p,#toolChoice .section-title p{color:var(--muted);font-size:12px;margin:5px 0 0;}
 #printPreview{margin-top:18px;}
+
+
+/* PRINTING LAYOUT */
+.print-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;}
+.print-size{border:1px solid var(--border);border-radius:12px;padding:13px 17px;background:#f4f6fa;color:#263142;font-weight:800;cursor:pointer;}
+.print-size:hover{transform:translateY(-1px);border-color:#aebbd0;}
+.print-size.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 8px 20px rgba(29,95,209,.22);}
+.print-settings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px;}
+.print-field{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fafbfc;}
+.print-field label{display:block;font-size:12px;font-weight:800;color:#344054;margin-bottom:7px;}
+.print-field select{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px;background:#fff;color:var(--text);}
+.print-preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:17px;}
+.print-sheet{border:1px solid var(--border);border-radius:10px;padding:10px;background:#f7f9fc;text-align:center;}
+.print-sheet img{width:100%;height:auto;display:block;background:#fff;border:1px solid var(--border);border-radius:5px;}
+.print-sheet-title{font-weight:850;font-size:13px;margin-top:8px;}
+.print-sheet-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.print-back{margin-top:10px!important;background:#eef2f7!important;color:#263142!important;border:1px solid var(--border)!important;}
+@media(max-width:700px){.print-options,.print-settings{grid-template-columns:1fr;}}
+
 </style>
 
 <!-- Google tag (gtag.js) -->
@@ -586,6 +605,62 @@ footer{
         Front positions are normal and back positions are reversed. Automatic blank positions are added only where a physical A4 slot is unused. Everything is processed locally in your browser.
         Everything is processed locally in your browser.
       </p>
+    </div>
+  </section>
+
+
+  <section id="printingTool" class="card hidden">
+    <div class="section-title">
+      <div>
+        <h2>Printing Layout</h2>
+        <p>Arrange complete Pecha PDF pages vertically on printable sheets.</p>
+      </div>
+    </div>
+
+    <label class="upload" for="printPdfInput">
+      <div class="upload-icon">↑</div>
+      <span class="upload-title">Choose PDF</span>
+      <span id="printFileName" class="upload-file">Click here or drag & drop a PDF from your computer</span>
+    </label>
+    <input id="printPdfInput" type="file" accept="application/pdf,.pdf">
+
+    <div id="printControls" class="controls hidden">
+      <span class="label">Choose paper size</span>
+      <div class="print-options">
+        <button class="print-size active" data-size="A4" type="button">A4</button>
+        <button class="print-size" data-size="A3" type="button">A3</button>
+        <button class="print-size" data-size="B4" type="button">B4</button>
+      </div>
+
+      <div class="print-settings">
+        <div class="print-field">
+          <label for="printOrientation">Sheet orientation</label>
+          <select id="printOrientation">
+            <option value="auto" selected>Auto (match Pecha page)</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+        </div>
+        <div class="print-field">
+          <label for="printMargin">Margin</label>
+          <select id="printMargin">
+            <option value="0">0 mm</option>
+            <option value="3">3 mm</option>
+            <option value="5" selected>5 mm</option>
+            <option value="10">10 mm</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="printPreviewBtn" class="primary" type="button">Preview Layout</button>
+        <button id="printDownloadBtn" class="success" type="button" disabled>Download PDF</button>
+      </div>
+      <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
+
+      <div id="printStatus" class="status"></div>
+      <p class="note">Pages are placed vertically in their original PDF form. The downloaded PDF does not rasterize or JPEG-compress the source pages. Pages stay at original size whenever they fit the selected sheet; only pages that cannot physically fit are proportionally reduced.</p>
+      <div id="printPreview" class="print-preview-grid"></div>
     </div>
   </section>
 
@@ -949,6 +1024,7 @@ dropZone.addEventListener("drop", e => {
   const printing = document.getElementById('printingTool');
   const openAlignment = document.getElementById('openAlignment');
   const openPrinting = document.getElementById('openPrinting');
+
   function showTool(which){
     choice.classList.add('hidden');
     alignment.classList.toggle('hidden', which !== 'alignment');
@@ -965,57 +1041,152 @@ dropZone.addEventListener("drop", e => {
   const pPreview=document.getElementById('printPreview');
   const pPreviewBtn=document.getElementById('printPreviewBtn');
   const pDownload=document.getElementById('printDownloadBtn');
-  let pFile=null, pSize='A4', pDoc=null;
-  const sizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
+  const pBack=document.getElementById('printBackBtn');
+  const pOrientation=document.getElementById('printOrientation');
+  const pMargin=document.getElementById('printMargin');
+
+  let pFile=null, pDoc=null, pSize='A4', pPlan=[];
+  const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
+  const GAP_PT=3*72/25.4;
+  const MM_PT=72/25.4;
+
+  function pSetStatus(text,type=''){
+    pStatus.innerHTML=text;
+    pStatus.className='status '+type;
+  }
+
+  function getSheetSize(firstW,firstH){
+    const base=paperSizes[pSize];
+    let w=base[0],h=base[1];
+    const mode=pOrientation.value;
+    if(mode==='landscape' || (mode==='auto' && firstW>firstH)) [w,h]=[h,w];
+    return [w,h];
+  }
+
+  async function makePlan(){
+    if(!pDoc)return [];
+    const first=await pDoc.getPage(1);
+    const firstVp=first.getViewport({scale:1});
+    const [sheetW,sheetH]=getSheetSize(firstVp.width,firstVp.height);
+    const margin=Number(pMargin.value)*MM_PT;
+    const usableW=Math.max(1,sheetW-margin*2);
+    const usableH=Math.max(1,sheetH-margin*2);
+    const plan=[];
+    let sheet=[];
+    let usedH=0;
+
+    for(let i=0;i<pDoc.numPages;i++){
+      const pg=await pDoc.getPage(i+1);
+      const vp=pg.getViewport({scale:1});
+      const srcW=vp.width,srcH=vp.height;
+      let scale=1;
+      if(srcW>usableW) scale=Math.min(scale,usableW/srcW);
+      if(srcH>usableH) scale=Math.min(scale,usableH/srcH);
+      const drawW=srcW*scale,drawH=srcH*scale;
+      const needed=sheet.length ? GAP_PT+drawH : drawH;
+
+      if(sheet.length && usedH+needed>usableH+0.01){
+        plan.push({items:sheet,sheetW,sheetH,margin});
+        sheet=[];usedH=0;
+      }
+      sheet.push({index:i,scale,drawW,drawH,srcW,srcH,scaled:scale<0.99999});
+      usedH += sheet.length===1 ? drawH : GAP_PT+drawH;
+    }
+    if(sheet.length)plan.push({items:sheet,sheetW,sheetH,margin});
+    return plan;
+  }
+
+  async function buildPrintPdf(){
+    if(!pFile||!pDoc)return null;
+    pPlan=await makePlan();
+    const src=await PDFLib.PDFDocument.load(await pFile.arrayBuffer());
+    const out=await PDFLib.PDFDocument.create();
+    const embedded=[];
+    for(let i=0;i<src.getPageCount();i++) embedded.push(await out.embedPage(src.getPage(i)));
+
+    for(const sheet of pPlan){
+      const page=out.addPage([sheet.sheetW,sheet.sheetH]);
+      let y=sheet.sheetH-sheet.margin;
+      for(const item of sheet.items){
+        y-=item.drawH;
+        const x=sheet.margin+(sheet.sheetW-sheet.margin*2-item.drawW)/2;
+        page.drawPage(embedded[item.index],{x,y,width:item.drawW,height:item.drawH});
+        y-=GAP_PT;
+      }
+    }
+    return out;
+  }
+
+  async function renderPreview(bytes){
+    pPreview.innerHTML='';
+    const doc=await pdfjsLib.getDocument({data:new Uint8Array(bytes)}).promise;
+    const limit=Math.min(doc.numPages,12);
+    for(let i=0;i<limit;i++){
+      const pg=await doc.getPage(i+1);
+      const vp=pg.getViewport({scale:.48});
+      const c=document.createElement('canvas');
+      c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);
+      await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      const box=document.createElement('div');box.className='print-sheet';
+      const img=document.createElement('img');img.src=c.toDataURL('image/png');
+      const title=document.createElement('div');title.className='print-sheet-title';title.textContent=`Sheet ${i+1} / ${doc.numPages}`;
+      const count=pPlan[i]?.items?.length||0;
+      const sub=document.createElement('div');sub.className='print-sheet-sub';sub.textContent=`${pSize} • ${count} Pecha page${count===1?'':'s'} placed vertically`;
+      box.append(img,title,sub);pPreview.appendChild(box);
+    }
+    if(doc.numPages>12){
+      const more=document.createElement('div');more.className='note';more.textContent=`Preview shows the first 12 sheets. Download includes all ${doc.numPages} sheets.`;pPreview.appendChild(more);
+    }
+  }
+
   document.querySelectorAll('.print-size').forEach(btn=>btn.addEventListener('click',()=>{
     document.querySelectorAll('.print-size').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active'); pSize=btn.dataset.size; pDownload.disabled=true; pPreview.innerHTML='';
+    btn.classList.add('active');pSize=btn.dataset.size;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
   }));
+  [pOrientation,pMargin].forEach(el=>el.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];}));
+  pInput.addEventListener('change',e=>loadPrint(e.target.files[0]));
+
   async function loadPrint(file){
-    if(!file || (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf'))) {pStatus.textContent='Please choose a PDF file.';pStatus.className='status error';return;}
-    pFile=file; pName.textContent=file.name; pControls.classList.remove('hidden');
-    pStatus.textContent='Loading PDF...'; pStatus.className='status';
+    if(!file||(!file.type.includes('pdf')&&!file.name.toLowerCase().endsWith('.pdf'))){pSetStatus('Please choose a PDF file.','error');return;}
+    pFile=file;pName.textContent=file.name;pControls.classList.remove('hidden');pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
+    pSetStatus('<span class="loading"></span>Loading PDF...');
     try{
       const data=new Uint8Array(await file.arrayBuffer());
       pDoc=await pdfjsLib.getDocument({data}).promise;
-      pStatus.textContent=`${pDoc.numPages} pages loaded. Choose A4, A3 or B4.`; pStatus.className='status ok';
-    }catch(e){console.error(e);pDoc=null;pStatus.textContent='Could not read this PDF.';pStatus.className='status error';}
+      pSetStatus(`${pDoc.numPages} pages loaded. Choose paper size and preview the layout.`,'ok');
+    }catch(e){console.error(e);pDoc=null;pSetStatus('Could not read this PDF. Please choose another PDF.','error');}
   }
-  pInput.addEventListener('change',e=>loadPrint(e.target.files[0]));
+
   pPreviewBtn.addEventListener('click',async()=>{
-    if(!pDoc)return; pPreviewBtn.disabled=true;pDownload.disabled=true;pPreview.innerHTML='';
-    pStatus.textContent='Creating preview...';
+    if(!pDoc){pSetStatus('Please choose a PDF first.','error');return;}
+    pPreviewBtn.disabled=true;pDownload.disabled=true;pSetStatus('<span class="loading"></span>Creating print layout preview...');
     try{
-      for(let i=0;i<Math.min(pDoc.numPages,24);i++){
-        const pg=await pDoc.getPage(i+1); const vp=pg.getViewport({scale:.28});
-        const c=document.createElement('canvas'); c.width=vp.width;c.height=vp.height; const ctx=c.getContext('2d');
-        await pg.render({canvasContext:ctx,viewport:vp}).promise;
-        const box=document.createElement('div');box.className='page';
-        const img=document.createElement('img');img.src=c.toDataURL('image/jpeg',.82);
-        const lab=document.createElement('div');lab.className='new';lab.textContent=`Sheet ${i+1} / ${pDoc.numPages}`;
-        const sub=document.createElement('div');sub.className='original';sub.textContent=`${pSize} • Original page preserved in downloaded PDF`;
-        box.append(img,lab,sub);pPreview.appendChild(box);
-      }
-      pDownload.disabled=false;pStatus.textContent=pDoc.numPages>24?'Preview shows first 24 pages. Download includes all pages.':'Preview ready.';pStatus.className='status ok';
-    }catch(e){console.error(e);pStatus.textContent='Could not create preview.';pStatus.className='status error';}
+      const out=await buildPrintPdf();
+      const bytes=await out.save({useObjectStreams:false});
+      await renderPreview(bytes);
+      const scaled=pPlan.flatMap(s=>s.items).filter(i=>i.scaled).length;
+      pDownload.disabled=false;
+      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${scaled?` ${scaled} page${scaled===1?' was':'s were'} proportionally reduced to fit.`:''}`,'ok');
+    }catch(e){console.error(e);pSetStatus('Could not create the printing layout preview.','error');}
     finally{pPreviewBtn.disabled=false;}
   });
+
   pDownload.addEventListener('click',async()=>{
-    if(!pFile||!pDoc)return; pDownload.disabled=true;pStatus.textContent='Creating PDF...';
+    if(!pFile||!pDoc)return;
+    pDownload.disabled=true;pPreviewBtn.disabled=true;pSetStatus('<span class="loading"></span>Creating print-ready PDF...');
     try{
-      const src=await PDFLib.PDFDocument.load(await pFile.arrayBuffer()); const out=await PDFLib.PDFDocument.create();
-      const [w,h]=sizes[pSize];
-      for(let i=0;i<src.getPageCount();i++){
-        const [pg]=await out.copyPages(src,[i]); const srcSize=pg.getSize();
-        // First prototype: preserve the source page itself; selected paper size is recorded as the target layout.
-        // No rasterization or JPEG conversion is performed.
-        out.addPage(pg);
-      }
-      const bytes=await out.save(); const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+      const out=await buildPrintPdf();
+      const bytes=await out.save({useObjectStreams:false});
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
       const a=document.createElement('a');a.href=url;a.download=pFile.name.replace(/\.pdf$/i,'')+`_printing_${pSize}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-      pStatus.textContent='PDF downloaded. Original PDF page content was kept without image conversion.';pStatus.className='status ok';
-    }catch(e){console.error(e);pStatus.textContent='Could not create the PDF.';pStatus.className='status error';}
-    finally{pDownload.disabled=false;}
+      const scaled=pPlan.flatMap(s=>s.items).filter(i=>i.scaled).length;
+      pSetStatus(`PDF downloaded successfully. Original PDF pages were embedded directly without JPEG/image conversion.${scaled?' Pages that could not fit at 100% were proportionally reduced.':''}`,'ok');
+    }catch(e){console.error(e);pSetStatus('Could not create the printing PDF.','error');}
+    finally{pDownload.disabled=false;pPreviewBtn.disabled=false;}
+  });
+
+  pBack.addEventListener('click',()=>{
+    printing.classList.add('hidden');alignment.classList.add('hidden');choice.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'});
   });
 })();
 </script>
