@@ -511,12 +511,25 @@ footer{
 #printPreview{margin-top:18px;}
 
 
+/* FIT WARNING DIALOG */
+.fit-modal{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(5,10,24,.62);backdrop-filter:blur(4px)}
+.fit-modal.open{display:flex}
+.fit-dialog{width:min(520px,94vw);background:#fff;border:1px solid var(--border);border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.28)}
+.fit-dialog h3{margin:0 0 10px;font-size:19px;color:var(--text)}
+.fit-dialog p{margin:8px 0;color:#475467;font-size:13px;line-height:1.55}
+.fit-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:17px}
+.fit-actions button{border:0;border-radius:11px;padding:12px 15px;font-weight:800;cursor:pointer}
+.fit-confirm{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff}
+.fit-cancel{background:#eef2f7;color:#263142;border:1px solid var(--border)!important}
+@media(max-width:700px){.fit-actions{grid-template-columns:1fr}}
+
 /* PRINTING LAYOUT */
 .print-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;}
 .print-size{border:1px solid var(--border);border-radius:12px;padding:13px 17px;background:#f4f6fa;color:#263142;font-weight:800;cursor:pointer;}
 .print-size:hover{transform:translateY(-1px);border-color:#aebbd0;}
 .print-size.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 8px 20px rgba(29,95,209,.22);}
 .print-settings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px;}
+.print-settings-centered{grid-template-columns:minmax(240px,420px);justify-content:center;}
 .print-field{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fafbfc;}
 .print-field label{display:block;font-size:12px;font-weight:800;color:#344054;margin-bottom:7px;}
 .print-field select{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px;background:#fff;color:var(--text);}
@@ -526,7 +539,7 @@ footer{
 .print-sheet-title{font-weight:850;font-size:13px;margin-top:8px;}
 .print-sheet-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
 .print-back{margin-top:10px!important;background:#eef2f7!important;color:#263142!important;border:1px solid var(--border)!important;}
-@media(max-width:700px){.print-options,.print-settings{grid-template-columns:1fr;}}
+@media(max-width:700px){.print-options,.print-settings,.print-settings-centered{grid-template-columns:1fr;}}
 
 </style>
 
@@ -632,19 +645,13 @@ footer{
         <button class="print-size" data-size="B4" type="button">B4</button>
       </div>
 
-      <div class="print-settings">
+      <div class="print-settings print-settings-centered">
         <div class="print-field">
           <label for="printOrientation">Sheet orientation</label>
           <select id="printOrientation">
             <option value="auto" selected>Auto (match Pecha page)</option>
             <option value="portrait">Portrait</option>
             <option value="landscape">Landscape</option>
-          </select>
-        </div>
-        <div class="print-field">
-          <label for="printMargin">Page margin / gap</label>
-          <select id="printMargin" disabled>
-            <option value="0" selected>0 mm</option>
           </select>
         </div>
       </div>
@@ -656,10 +663,23 @@ footer{
       <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
 
       <div id="printStatus" class="status"></div>
-      <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The complete group of pages is centered on every sheet. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. A single 0.15 mm cutting stroke is placed only around Original Page 1; no cutting strokes are added to later pages or between pages. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
+      <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. A single 0.15 mm cutting stroke is placed only around Original Page 1; no cutting strokes are added to later pages or between pages. If a page is too large for the selected sheet, a warning will ask whether you want to fit it proportionally or cancel.</p>
       <div id="printPreview" class="print-preview-grid"></div>
     </div>
   </section>
+
+  <div id="fitWarningModal" class="fit-modal" aria-hidden="true">
+    <div class="fit-dialog" role="dialog" aria-modal="true" aria-labelledby="fitWarningTitle">
+      <h3 id="fitWarningTitle">Page is larger than the selected sheet</h3>
+      <p id="fitWarningText"></p>
+      <p><strong>Fit to Sheet:</strong> The oversized page will be reduced proportionally, from its original size, only because you chose this option. It will not be stretched or distorted.</p>
+      <p><strong>Cancel:</strong> Nothing will be resized. You can choose another paper size or orientation.</p>
+      <div class="fit-actions">
+        <button id="fitConfirmBtn" class="fit-confirm" type="button">Fit to Sheet</button>
+        <button id="fitCancelBtn" class="fit-cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <section id="previewCard" class="card hidden">
     <div class="preview-head">
@@ -1040,9 +1060,13 @@ dropZone.addEventListener("drop", e => {
   const pDownload=document.getElementById('printDownloadBtn');
   const pBack=document.getElementById('printBackBtn');
   const pOrientation=document.getElementById('printOrientation');
-  const pMargin=document.getElementById('printMargin');
+  const fitModal=document.getElementById('fitWarningModal');
+  const fitWarningText=document.getElementById('fitWarningText');
+  const fitConfirmBtn=document.getElementById('fitConfirmBtn');
+  const fitCancelBtn=document.getElementById('fitCancelBtn');
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
+  let fitOversizedPages=false;
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
   // Printing rule: source pages stay at exactly 100% size.
   // There is no gap/margin between vertically stacked Pecha pages.
@@ -1063,7 +1087,7 @@ dropZone.addEventListener("drop", e => {
     return [w,h];
   }
 
-  async function makePlan(){
+  async function makePlan(allowFit=false){
     if(!pDoc) return {ok:false, plan:[], issue:null};
 
     const first=await pDoc.getPage(1);
@@ -1081,50 +1105,47 @@ dropZone.addEventListener("drop", e => {
       const vp=pg.getViewport({scale:1});
       const srcW=vp.width,srcH=vp.height;
 
-      // IMPORTANT: Never resize the source page. It must fit at exactly 100%.
-      if(srcW > usableW + 0.01 || srcH > usableH + 0.01){
-        const sheetName=pSize;
-        const orientation=(sheetW > sheetH) ? 'Landscape' : 'Portrait';
-        const pageWmm=srcW / MM_PT;
-        const pageHmm=srcH / MM_PT;
-        const usableWmm=usableW / MM_PT;
-        const usableHmm=usableH / MM_PT;
-        return {
-          ok:false,
-          plan:[],
-          issue:{
+      const oversized = srcW > usableW + 0.01 || srcH > usableH + 0.01;
+      let drawW=srcW, drawH=srcH, scale=1, scaled=false;
+
+      // Default: exact original size. If the user explicitly selects Fit to Sheet,
+      // reduce proportionally only for pages that are too large.
+      if(oversized){
+        if(!allowFit){
+          const sheetName=pSize;
+          const orientation=(sheetW > sheetH) ? 'Landscape' : 'Portrait';
+          return {ok:false,plan:[],issue:{
             page:i+1,
-            pageWmm,
-            pageHmm,
-            sheetName,
-            orientation,
-            usableWmm,
-            usableHmm,
-            sheetWmm:sheetW/MM_PT,
-            sheetHmm:sheetH/MM_PT,
-            marginMm:Number(pMargin.value)
-          }
-        };
+            pageWmm:srcW/MM_PT, pageHmm:srcH/MM_PT,
+            sheetName, orientation,
+            usableWmm:usableW/MM_PT, usableHmm:usableH/MM_PT,
+            sheetWmm:sheetW/MM_PT, sheetHmm:sheetH/MM_PT, marginMm:0
+          }};
+        }
+        scale=Math.min(usableW/srcW, usableH/srcH);
+        drawW=srcW*scale;
+        drawH=srcH*scale;
+        scaled=true;
       }
 
-      const needed=sheet.length ? GAP_PT+srcH : srcH;
+      const needed=sheet.length ? GAP_PT+drawH : drawH;
 
       if(sheet.length && usedH+needed>usableH+0.01){
         plan.push({items:sheet,sheetW,sheetH,margin});
         sheet=[];usedH=0;
       }
 
-      sheet.push({index:i,scale:1,drawW:srcW,drawH:srcH,srcW,srcH,scaled:false});
-      usedH += sheet.length===1 ? srcH : GAP_PT+srcH;
+      sheet.push({index:i,scale,drawW,drawH,srcW,srcH,scaled});
+      usedH += sheet.length===1 ? drawH : GAP_PT+drawH;
     }
 
     if(sheet.length)plan.push({items:sheet,sheetW,sheetH,margin});
     return {ok:true,plan,issue:null};
   }
 
-  async function buildPrintPdf(){
+  async function buildPrintPdf(allowFit=fitOversizedPages){
     if(!pFile||!pDoc)return null;
-    const result=await makePlan();
+    const result=await makePlan(allowFit);
     if(!result.ok){
       pPlan=[];
       return {error:result.issue};
@@ -1137,14 +1158,8 @@ dropZone.addEventListener("drop", e => {
 
     for(const sheet of pPlan){
       const page=out.addPage([sheet.sheetW,sheet.sheetH]);
+      let y=sheet.sheetH;
       const placements=[];
-
-      // Keep the same 0 mm gap, but center the COMPLETE group of Pecha pages
-      // on every physical sheet instead of starting the group at the top.
-      // Each individual page is also centered horizontally within the sheet.
-      const groupH=sheet.items.reduce((sum,item)=>sum+item.drawH,0)
-                       + Math.max(0,sheet.items.length-1)*GAP_PT;
-      let y=(sheet.sheetH+groupH)/2;
 
       for(const item of sheet.items){
         y-=item.drawH;
@@ -1196,14 +1211,14 @@ dropZone.addEventListener("drop", e => {
 
   document.querySelectorAll('.print-size').forEach(btn=>btn.addEventListener('click',()=>{
     document.querySelectorAll('.print-size').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');pSize=btn.dataset.size;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
+    btn.classList.add('active');pSize=btn.dataset.size;fitOversizedPages=false;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
   }));
-  [pOrientation,pMargin].forEach(el=>el.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];}));
+  pOrientation.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];});
   pInput.addEventListener('change',e=>loadPrint(e.target.files[0]));
 
   async function loadPrint(file){
     if(!file||(!file.type.includes('pdf')&&!file.name.toLowerCase().endsWith('.pdf'))){pSetStatus('Please choose a PDF file.','error');return;}
-    pFile=file;pName.textContent=file.name;pControls.classList.remove('hidden');pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
+    pFile=file;pName.textContent=file.name;pControls.classList.remove('hidden');fitOversizedPages=false;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
     pSetStatus('<span class="loading"></span>Loading PDF...');
     try{
       const data=new Uint8Array(await file.arrayBuffer());
@@ -1211,6 +1226,35 @@ dropZone.addEventListener("drop", e => {
       pSetStatus(`${pDoc.numPages} pages loaded. Choose paper size and preview the layout.`,'ok');
     }catch(e){console.error(e);pDoc=null;pSetStatus('Could not read this PDF. Please choose another PDF.','error');}
   }
+
+  function showFitWarning(issue){
+    fitWarningText.innerHTML=`Original Page <strong>${issue.page}</strong> is <strong>${issue.pageWmm.toFixed(1)} × ${issue.pageHmm.toFixed(1)} mm</strong>, but the selected <strong>${issue.sheetName} ${issue.orientation}</strong> sheet is <strong>${issue.sheetWmm.toFixed(1)} × ${issue.sheetHmm.toFixed(1)} mm</strong>. It cannot fit at 100% original size.`;
+    fitModal.classList.add('open');
+    fitModal.setAttribute('aria-hidden','false');
+  }
+  function closeFitWarning(){
+    fitModal.classList.remove('open');
+    fitModal.setAttribute('aria-hidden','true');
+  }
+  fitCancelBtn.addEventListener('click',()=>{
+    fitOversizedPages=false; closeFitWarning();
+    pDownload.disabled=true;
+    pSetStatus('Cancelled. Original page size was not changed. Choose another paper size or orientation.','error');
+  });
+  fitConfirmBtn.addEventListener('click',async()=>{
+    fitOversizedPages=true; closeFitWarning();
+    pPreviewBtn.disabled=true; pDownload.disabled=true;
+    pSetStatus('<span class="loading"></span>Fitting oversized page proportionally and creating preview...');
+    try{
+      const out=await buildPrintPdf(true);
+      if(out && out.error){ fitOversizedPages=false; showFitWarning(out.error); return; }
+      const bytes=await out.save({useObjectStreams:false});
+      await renderPreview(bytes);
+      pDownload.disabled=false;
+      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created. Oversized page${pPlan.some(s=>s.items.some(i=>i.scaled))?' was':'s were'} proportionally fitted by your choice.`,'ok');
+    }catch(e){console.error(e);pSetStatus('Could not create the fitted printing layout preview.','error');}
+    finally{pPreviewBtn.disabled=false;}
+  });
 
   pPreviewBtn.addEventListener('click',async()=>{
     if(!pDoc){pSetStatus('Please choose a PDF first.','error');return;}
@@ -1221,7 +1265,9 @@ dropZone.addEventListener("drop", e => {
         const x=out.error;
         pPreview.innerHTML='';
         pDownload.disabled=true;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm (0 mm margin). The page will <strong>not</strong> be resized. Please choose a larger paper size or orientation.`,'error');
+        fitOversizedPages=false;
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is larger than the selected sheet at 100% size. Please choose Fit to Sheet or Cancel.`,'error');
+        showFitWarning(x);
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
@@ -1239,7 +1285,9 @@ dropZone.addEventListener("drop", e => {
       const out=await buildPrintPdf();
       if(out && out.error){
         const x=out.error;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Margin and page gap are fixed at 0 mm. Please choose a larger paper size or orientation.`,'error');
+        fitOversizedPages=false;
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is larger than the selected sheet at 100% size. Please choose Fit to Sheet or Cancel.`,'error');
+        showFitWarning(x);
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
