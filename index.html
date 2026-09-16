@@ -642,12 +642,9 @@ footer{
           </select>
         </div>
         <div class="print-field">
-          <label for="printMargin">Margin</label>
-          <select id="printMargin">
-            <option value="0">0 mm</option>
-            <option value="3">3 mm</option>
-            <option value="5" selected>5 mm</option>
-            <option value="10">10 mm</option>
+          <label for="printMargin">Page margin / gap</label>
+          <select id="printMargin" disabled>
+            <option value="0" selected>0 mm</option>
           </select>
         </div>
       </div>
@@ -659,7 +656,7 @@ footer{
       <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
 
       <div id="printStatus" class="status"></div>
-      <p class="note">Pages are placed vertically in their original PDF form. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
+      <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. A single 0.15 mm cutting stroke is placed only around Original Page 1; no cutting strokes are added to later pages or between pages. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
       <div id="printPreview" class="print-preview-grid"></div>
     </div>
   </section>
@@ -1047,8 +1044,11 @@ dropZone.addEventListener("drop", e => {
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
-  const GAP_PT=3*72/25.4;
+  // Printing rule: source pages stay at exactly 100% size.
+  // There is no gap/margin between vertically stacked Pecha pages.
+  const GAP_PT=0;
   const MM_PT=72/25.4;
+  const CUT_STROKE_PT=0.15*MM_PT;
 
   function pSetStatus(text,type=''){
     pStatus.innerHTML=text;
@@ -1069,9 +1069,9 @@ dropZone.addEventListener("drop", e => {
     const first=await pDoc.getPage(1);
     const firstVp=first.getViewport({scale:1});
     const [sheetW,sheetH]=getSheetSize(firstVp.width,firstVp.height);
-    const margin=Number(pMargin.value)*MM_PT;
-    const usableW=Math.max(1,sheetW-margin*2);
-    const usableH=Math.max(1,sheetH-margin*2);
+    const margin=0;
+    const usableW=sheetW;
+    const usableH=sheetH;
     const plan=[];
     let sheet=[];
     let usedH=0;
@@ -1137,12 +1137,30 @@ dropZone.addEventListener("drop", e => {
 
     for(const sheet of pPlan){
       const page=out.addPage([sheet.sheetW,sheet.sheetH]);
-      let y=sheet.sheetH-sheet.margin;
+      let y=sheet.sheetH;
+      const placements=[];
+
       for(const item of sheet.items){
         y-=item.drawH;
-        const x=sheet.margin+(sheet.sheetW-sheet.margin*2-item.drawW)/2;
+        const x=(sheet.sheetW-item.drawW)/2;
         page.drawPage(embedded[item.index],{x,y,width:item.drawW,height:item.drawH});
+        placements.push({x,y,w:item.drawW,h:item.drawH});
         y-=GAP_PT;
+      }
+
+      // Cutting marks: 0.15 mm stroke ONLY on Sheet 1.
+      // Every Pecha page physically placed on Sheet 1 gets a complete outline
+      // on all four edges. Later sheets keep the exact same 0 mm spacing and
+      // page placement, but have NO cutting strokes.
+      if(pPlan.indexOf(sheet) === 0){
+        const lineWidth=CUT_STROKE_PT;
+        const lineColor=PDFLib.rgb(0,0,0);
+        for(const pos of placements){
+          page.drawLine({start:{x:pos.x,y:pos.y+pos.h},end:{x:pos.x+pos.w,y:pos.y+pos.h},thickness:lineWidth,color:lineColor});
+          page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x+pos.w,y:pos.y},thickness:lineWidth,color:lineColor});
+          page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x,y:pos.y+pos.h},thickness:lineWidth,color:lineColor});
+          page.drawLine({start:{x:pos.x+pos.w,y:pos.y},end:{x:pos.x+pos.w,y:pos.y+pos.h},thickness:lineWidth,color:lineColor});
+        }
       }
     }
     return out;
@@ -1197,7 +1215,7 @@ dropZone.addEventListener("drop", e => {
         const x=out.error;
         pPreview.innerHTML='';
         pDownload.disabled=true;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm. The page will <strong>not</strong> be resized. Please choose a larger paper size/orientation or use a smaller-margin setting.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm (0 mm margin). The page will <strong>not</strong> be resized. Please choose a larger paper size or orientation.`,'error');
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
@@ -1215,7 +1233,7 @@ dropZone.addEventListener("drop", e => {
       const out=await buildPrintPdf();
       if(out && out.error){
         const x=out.error;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Please choose a larger paper size/orientation or use a smaller-margin setting.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Margin and page gap are fixed at 0 mm. Please choose a larger paper size or orientation.`,'error');
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
