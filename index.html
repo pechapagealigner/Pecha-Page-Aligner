@@ -525,8 +525,46 @@ footer{
 .print-sheet img{width:100%;height:auto;display:block;background:#fff;border:1px solid var(--border);border-radius:5px;}
 .print-sheet-title{font-weight:850;font-size:13px;margin-top:8px;}
 .print-sheet-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
-.print-back{margin-top:10px!important;background:#eef2f7!important;color:#263142!important;border:1px solid var(--border)!important;}
-@media(max-width:700px){.print-options,.print-settings{grid-template-columns:1fr;}}
+.print-back{
+  width:100%;
+  margin-top:12px!important;
+  padding:12px 18px!important;
+  border:1px solid #cfd8e6!important;
+  border-radius:12px!important;
+  background:linear-gradient(180deg,#ffffff,#f3f6fa)!important;
+  color:#263142!important;
+  font-weight:800!important;
+  cursor:pointer;
+  box-shadow:0 3px 10px rgba(20,40,70,.06);
+}
+.print-back:hover{
+  transform:translateY(-1px);
+  border-color:#aebbd0!important;
+  box-shadow:0 8px 18px rgba(20,40,70,.11);
+}
+.print-back:active{transform:translateY(0);}
+.back-tool-btn{
+  width:100%;
+  margin-top:12px;
+  padding:12px 18px;
+  border:1px solid #cfd8e6;
+  border-radius:12px;
+  background:linear-gradient(180deg,#ffffff,#f3f6fa);
+  color:#263142;
+  font-weight:800;
+  cursor:pointer;
+  box-shadow:0 3px 10px rgba(20,40,70,.06);
+}
+.back-tool-btn:hover{
+  transform:translateY(-1px);
+  border-color:#aebbd0;
+  box-shadow:0 8px 18px rgba(20,40,70,.11);
+}
+.back-tool-btn:active{transform:translateY(0);}
+.print-settings{grid-template-columns:1fr;}
+.print-settings .print-field{max-width:520px;width:100%;margin:0 auto;}
+@media(max-width:700px){.print-options,.print-settings{grid-template-columns:1fr;}
+.print-settings .print-field{max-width:520px;width:100%;margin:0 auto;}}
 
 </style>
 
@@ -597,6 +635,7 @@ footer{
         <button id="previewBtn" class="primary" type="button">Preview Alignment</button>
         <button id="downloadBtn" class="success" type="button" disabled>Download PDF</button>
       </div>
+      <button id="alignmentBackBtn" class="back-tool-btn" type="button">Back to PDF Tools</button>
 
       <div id="status" class="status"></div>
 
@@ -639,12 +678,6 @@ footer{
             <option value="auto" selected>Auto (match Pecha page)</option>
             <option value="portrait">Portrait</option>
             <option value="landscape">Landscape</option>
-          </select>
-        </div>
-        <div class="print-field">
-          <label for="printMargin">Page margin / gap</label>
-          <select id="printMargin" disabled>
-            <option value="0" selected>0 mm</option>
           </select>
         </div>
       </div>
@@ -1021,6 +1054,7 @@ dropZone.addEventListener("drop", e => {
   const printing = document.getElementById('printingTool');
   const openAlignment = document.getElementById('openAlignment');
   const openPrinting = document.getElementById('openPrinting');
+  const alignmentBack = document.getElementById('alignmentBackBtn');
 
   function showTool(which){
     choice.classList.add('hidden');
@@ -1030,6 +1064,12 @@ dropZone.addEventListener("drop", e => {
   }
   openAlignment.addEventListener('click',()=>showTool('alignment'));
   openPrinting.addEventListener('click',()=>showTool('printing'));
+  alignmentBack.addEventListener('click',()=>{
+    alignment.classList.add('hidden');
+    printing.classList.add('hidden');
+    choice.classList.remove('hidden');
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
 
   const pInput=document.getElementById('printPdfInput');
   const pName=document.getElementById('printFileName');
@@ -1040,7 +1080,6 @@ dropZone.addEventListener("drop", e => {
   const pDownload=document.getElementById('printDownloadBtn');
   const pBack=document.getElementById('printBackBtn');
   const pOrientation=document.getElementById('printOrientation');
-  const pMargin=document.getElementById('printMargin');
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
@@ -1198,7 +1237,7 @@ dropZone.addEventListener("drop", e => {
     document.querySelectorAll('.print-size').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');pSize=btn.dataset.size;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
   }));
-  [pOrientation,pMargin].forEach(el=>el.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];}));
+  pOrientation.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];});
   pInput.addEventListener('change',e=>loadPrint(e.target.files[0]));
 
   async function loadPrint(file){
@@ -1221,7 +1260,7 @@ dropZone.addEventListener("drop", e => {
         const x=out.error;
         pPreview.innerHTML='';
         pDownload.disabled=true;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm (0 mm margin). The page will <strong>not</strong> be resized. Please choose a larger paper size or orientation.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm). The page will <strong>not</strong> be resized. Please choose a larger paper size or orientation.`,'error');
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
@@ -1239,7 +1278,7 @@ dropZone.addEventListener("drop", e => {
       const out=await buildPrintPdf();
       if(out && out.error){
         const x=out.error;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Margin and page gap are fixed at 0 mm. Please choose a larger paper size or orientation.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Page margin and gap are fixed at 0 mm. Please choose a larger paper size or orientation.`,'error');
         return;
       }
       const bytes=await out.save({useObjectStreams:false});
