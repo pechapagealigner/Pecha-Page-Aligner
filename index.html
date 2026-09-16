@@ -1041,111 +1041,10 @@ dropZone.addEventListener("drop", e => {
   const pBack=document.getElementById('printBackBtn');
   const pOrientation=document.getElementById('printOrientation');
   const pMargin=document.getElementById('printMargin');
-  // Fit-warning modal: shown only when the selected sheet is smaller
-  // than one or more original PDF pages.
-  const fitWarning = document.createElement('div');
-  fitWarning.id = 'fitWarningModal';
-  fitWarning.className = 'fit-warning-modal hidden';
-  fitWarning.innerHTML = `
-    <div class="fit-warning-box" role="dialog" aria-modal="true" aria-labelledby="fitWarningTitle">
-      <div class="fit-warning-icon">!</div>
-      <h3 id="fitWarningTitle">Page Size Warning</h3>
-      <div id="fitWarningText" class="fit-warning-text"></div>
-      <div class="fit-warning-actions">
-        <button type="button" id="fitCancelBtn" class="fit-btn fit-cancel">Cancel</button>
-        <button type="button" id="fitConfirmBtn" class="fit-btn fit-confirm">Fit</button>
-      </div>
-    </div>`;
-  document.body.appendChild(fitWarning);
-
-  const fitWarningText = fitWarning.querySelector('#fitWarningText');
-  const fitConfirmBtn = fitWarning.querySelector('#fitConfirmBtn');
-  const fitCancelBtn = fitWarning.querySelector('#fitCancelBtn');
-
-  const fitWarningStyle = document.createElement('style');
-  fitWarningStyle.textContent = `
-    .fit-warning-modal{
-      position:fixed; inset:0; z-index:99999;
-      display:flex; align-items:center; justify-content:center;
-      padding:20px; background:rgba(0,0,0,.48);
-      box-sizing:border-box;
-    }
-    .fit-warning-modal.hidden{display:none;}
-    .fit-warning-box{
-      width:min(460px,100%); box-sizing:border-box;
-      background:#fff; color:#222; border-radius:14px;
-      padding:24px; box-shadow:0 18px 55px rgba(0,0,0,.28);
-      text-align:center; font-family:inherit;
-    }
-    .fit-warning-icon{
-      width:42px; height:42px; line-height:42px; margin:0 auto 10px;
-      border-radius:50%; background:#fff3cd; color:#9a6700;
-      font-size:26px; font-weight:800;
-    }
-    .fit-warning-box h3{margin:0 0 12px; font-size:21px;}
-    .fit-warning-text{font-size:14px; line-height:1.55; margin-bottom:20px;}
-    .fit-warning-actions{display:flex; justify-content:center; gap:10px;}
-    .fit-btn{
-      min-width:105px; border:0; border-radius:8px; padding:10px 18px;
-      font-size:14px; font-weight:700; cursor:pointer;
-    }
-    .fit-cancel{background:#eee; color:#333;}
-    .fit-confirm{background:#222; color:#fff;}
-    .fit-warning-modal:not(.hidden) .fit-warning-box{animation:fitWarnIn .16s ease-out;}
-    @keyframes fitWarnIn{from{transform:scale(.97);opacity:0}to{transform:scale(1);opacity:1}}
-  `;
-  document.head.appendChild(fitWarningStyle);
-
-  function showFitWarning(issue){
-    fitWarningText.innerHTML =
-      `The original PDF page is <strong>${issue.pageWmm.toFixed(1)} × ${issue.pageHmm.toFixed(1)} mm</strong>, ` +
-      `but the selected <strong>${issue.sheetName} ${issue.orientation}</strong> sheet is ` +
-      `<strong>${issue.sheetWmm.toFixed(1)} × ${issue.sheetHmm.toFixed(1)} mm</strong>.<br><br>` +
-      `Choose <strong>Fit</strong> to resize the complete page proportionally so it fits fully inside the selected sheet. ` +
-      `Choose <strong>Cancel</strong> to keep the original size.`;
-    fitWarning.classList.remove('hidden');
-    fitConfirmBtn.focus();
-  }
-
-  function hideFitWarning(){
-    fitWarning.classList.add('hidden');
-  }
-
-  let fitAccepted = false;
-  let fitWarningResolver = null;
-
-  function askFitWarning(issue){
-    return new Promise(resolve=>{
-      fitWarningResolver=resolve;
-      showFitWarning(issue);
-    });
-  }
-
-  fitConfirmBtn.addEventListener('click',()=>{
-    hideFitWarning();
-    fitAccepted=true;
-    if(fitWarningResolver){const r=fitWarningResolver;r(true);fitWarningResolver=null;}
-  });
-
-  fitCancelBtn.addEventListener('click',()=>{
-    hideFitWarning();
-    fitAccepted=false;
-    if(fitWarningResolver){const r=fitWarningResolver;r(false);fitWarningResolver=null;}
-  });
-
-  fitWarning.addEventListener('click',e=>{
-    if(e.target===fitWarning) fitCancelBtn.click();
-  });
-
-  document.addEventListener('keydown',e=>{
-    if(!fitWarning.classList.contains('hidden') && e.key==='Escape') fitCancelBtn.click();
-  });
-
-
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
-  // Printing rule: source pages stay at exactly 100% unless the user explicitly chooses Fit.
+  // Printing rule: source pages stay at exactly 100% size.
   // There is no gap/margin between vertically stacked Pecha pages.
   const GAP_PT=0;
   const MM_PT=72/25.4;
@@ -1164,7 +1063,7 @@ dropZone.addEventListener("drop", e => {
     return [w,h];
   }
 
-  async function makePlan(allowFit=false){
+  async function makePlan(){
     if(!pDoc) return {ok:false, plan:[], issue:null};
 
     const first=await pDoc.getPage(1);
@@ -1182,64 +1081,50 @@ dropZone.addEventListener("drop", e => {
       const vp=pg.getViewport({scale:1});
       const srcW=vp.width,srcH=vp.height;
 
-      let drawW=srcW, drawH=srcH, scale=1, scaled=false;
-
-      // If the original page is larger than the selected sheet, ask for
-      // permission to fit it proportionally. Never stretch width/height
-      // independently, so the original aspect ratio is preserved.
+      // IMPORTANT: Never resize the source page. It must fit at exactly 100%.
       if(srcW > usableW + 0.01 || srcH > usableH + 0.01){
-        if(!allowFit){
-          const sheetName=pSize;
-          const orientation=(sheetW > sheetH) ? 'Landscape' : 'Portrait';
-          return {
-            ok:false, plan:[],
-            issue:{
-              page:i+1,
-              pageWmm:srcW/MM_PT,
-              pageHmm:srcH/MM_PT,
-              sheetName,
-              orientation,
-              usableWmm:usableW/MM_PT,
-              usableHmm:usableH/MM_PT,
-              sheetWmm:sheetW/MM_PT,
-              sheetHmm:sheetH/MM_PT,
-              marginMm:Number(pMargin.value)
-            }
-          };
-        }
-
-        scale=Math.min(usableW/srcW, usableH/srcH);
-        drawW=srcW*scale;
-        drawH=srcH*scale;
-        scaled=true;
+        const sheetName=pSize;
+        const orientation=(sheetW > sheetH) ? 'Landscape' : 'Portrait';
+        const pageWmm=srcW / MM_PT;
+        const pageHmm=srcH / MM_PT;
+        const usableWmm=usableW / MM_PT;
+        const usableHmm=usableH / MM_PT;
+        return {
+          ok:false,
+          plan:[],
+          issue:{
+            page:i+1,
+            pageWmm,
+            pageHmm,
+            sheetName,
+            orientation,
+            usableWmm,
+            usableHmm,
+            sheetWmm:sheetW/MM_PT,
+            sheetHmm:sheetH/MM_PT,
+            marginMm:Number(pMargin.value)
+          }
+        };
       }
 
-      const needed=sheet.length ? GAP_PT+drawH : drawH;
+      const needed=sheet.length ? GAP_PT+srcH : srcH;
 
       if(sheet.length && usedH+needed>usableH+0.01){
         plan.push({items:sheet,sheetW,sheetH,margin});
         sheet=[];usedH=0;
       }
 
-      sheet.push({
-        index:i,
-        scale,
-        drawW,
-        drawH,
-        srcW,
-        srcH,
-        scaled
-      });
-      usedH += sheet.length===1 ? drawH : GAP_PT+drawH;
+      sheet.push({index:i,scale:1,drawW:srcW,drawH:srcH,srcW,srcH,scaled:false});
+      usedH += sheet.length===1 ? srcH : GAP_PT+srcH;
     }
 
     if(sheet.length)plan.push({items:sheet,sheetW,sheetH,margin});
     return {ok:true,plan,issue:null};
   }
 
-  async function buildPrintPdf(allowFit=false){
+  async function buildPrintPdf(){
     if(!pFile||!pDoc)return null;
-    const result=await makePlan(allowFit);
+    const result=await makePlan();
     if(!result.ok){
       pPlan=[];
       return {error:result.issue};
@@ -1329,84 +1214,38 @@ dropZone.addEventListener("drop", e => {
 
   pPreviewBtn.addEventListener('click',async()=>{
     if(!pDoc){pSetStatus('Please choose a PDF first.','error');return;}
-    pPreviewBtn.disabled=true;pDownload.disabled=true;
-    pSetStatus('<span class="loading"></span>Creating print layout preview...');
+    pPreviewBtn.disabled=true;pDownload.disabled=true;pSetStatus('<span class="loading"></span>Creating print layout preview...');
     try{
-      fitAccepted=false;
-      let out=await buildPrintPdf(false);
-
-      if(out && out.error){
-        const approved=await askFitWarning(out.error);
-        if(!approved){
-          pPreview.innerHTML='';
-          pDownload.disabled=true;
-          pSetStatus('No PDF was created. Choose a larger paper size or orientation, or press Preview again and choose Fit.','error');
-          return;
-        }
-        pSetStatus('<span class="loading"></span>Fitting oversized page(s) proportionally...');
-        out=await buildPrintPdf(true);
-      }
-
+      const out=await buildPrintPdf();
       if(out && out.error){
         const x=out.error;
         pPreview.innerHTML='';
         pDownload.disabled=true;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} could not be fitted on ${x.sheetName} ${x.orientation}.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size. Page size: ${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm. Available sheet area: ${x.usableWmm.toFixed(1)} × ${x.usableHmm.toFixed(1)} mm (0 mm margin). The page will <strong>not</strong> be resized. Please choose a larger paper size or orientation.`,'error');
         return;
       }
-
       const bytes=await out.save({useObjectStreams:false});
       await renderPreview(bytes);
       pDownload.disabled=false;
-
-      const fittedCount=pPlan.reduce((n,s)=>n+s.items.filter(item=>item.scaled).length,0);
-      const fitNote=fittedCount
-        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet. The 0.15 mm cutting stroke is unchanged.`
-        : ` All source pages remain at their exact original size (100%).`;
-
-      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${fitNote} You can now download the fitted PDF.`,'ok');
+      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created. All source pages remain at their exact original size (100%).`,'ok');
     }catch(e){console.error(e);pSetStatus('Could not create the printing layout preview.','error');}
     finally{pPreviewBtn.disabled=false;}
   });
 
   pDownload.addEventListener('click',async()=>{
     if(!pFile||!pDoc)return;
-    pDownload.disabled=true;pPreviewBtn.disabled=true;
-    pSetStatus('<span class="loading"></span>Creating print-ready PDF...');
+    pDownload.disabled=true;pPreviewBtn.disabled=true;pSetStatus('<span class="loading"></span>Creating print-ready PDF...');
     try{
-      // Rebuild from the current settings. If a page is too large, ask before fitting.
-      let out=await buildPrintPdf(false);
-
-      if(out && out.error){
-        const approved=await askFitWarning(out.error);
-        if(!approved){
-          pSetStatus('Download cancelled. No pages were resized.','error');
-          return;
-        }
-        pSetStatus('<span class="loading"></span>Fitting oversized page(s) proportionally...');
-        out=await buildPrintPdf(true);
-      }
-
+      const out=await buildPrintPdf();
       if(out && out.error){
         const x=out.error;
-        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} could not be fitted on ${x.sheetName} ${x.orientation}. No PDF was created.`,'error');
+        pSetStatus(`<strong>Warning:</strong> Original Page ${x.page} is too large to fit on ${x.sheetName} ${x.orientation} at 100% size (${x.pageWmm.toFixed(1)} × ${x.pageHmm.toFixed(1)} mm). Nothing was resized and no PDF was created. Margin and page gap are fixed at 0 mm. Please choose a larger paper size or orientation.`,'error');
         return;
       }
-
       const bytes=await out.save({useObjectStreams:false});
       const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=pFile.name.replace(/\.pdf$/i,'')+`_printing_${pSize}.pdf`;
-      document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1500);
-
-      const fittedCount=pPlan.reduce((n,s)=>n+s.items.filter(item=>item.scaled).length,0);
-      const fitNote=fittedCount
-        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet. The 0.15 mm cutting stroke is unchanged.`
-        : ` Original PDF pages remain at their exact original size.`;
-
-      pSetStatus(`PDF downloaded successfully.${fitNote}`,'ok');
+      const a=document.createElement('a');a.href=url;a.download=pFile.name.replace(/\.pdf$/i,'')+`_printing_${pSize}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+      pSetStatus(`PDF downloaded successfully. Original PDF pages were embedded directly at their exact original size without JPEG/image conversion or resizing.`,'ok');
     }catch(e){console.error(e);pSetStatus('Could not create the printing PDF.','error');}
     finally{pDownload.disabled=false;pPreviewBtn.disabled=false;}
   });
