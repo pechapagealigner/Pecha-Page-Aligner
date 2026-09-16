@@ -1224,7 +1224,9 @@ dropZone.addEventListener("drop", e => {
     for(let i=0;i<src.getPageCount();i++) embedded.push(await out.embedPage(src.getPage(i)));
 
     let outputPosition=0;
+    let sheetNumber=0;
     for(const sheet of pPlan){
+      sheetNumber++;
       const page=out.addPage([sheet.sheetW,sheet.sheetH]);
       const placements=[];
       const groupH=sheet.items.reduce((sum,item)=>sum+item.drawH,0)
@@ -1242,11 +1244,16 @@ dropZone.addEventListener("drop", e => {
         y-=GAP_PT;
       }
 
-      // 0.15 mm cutting outline at output positions 1, 51, 101, 151, ...
-      for(const pos of placements){
-        if((pos.outputPosition-1)%50===0){
-          const t=CUT_STROKE_PT;
-          const c=PDFLib.rgb(0,0,0);
+      // 0.15 mm cutting outline on SHEET numbers 1, 51, 101, 151, ...
+      // The rule is based on the physical output sheet number, not the
+      // individual Pecha/output-page number. Every Pecha page arranged
+      // on a qualifying sheet receives its own edge outline.
+      const needsCutStroke=((sheetNumber-1)%50===0);
+      if(needsCutStroke){
+        const t=CUT_STROKE_PT;
+        const c=PDFLib.rgb(0,0,0);
+        for(const pos of placements){
+          // Stroke exactly on the original page edges; no margin is added.
           page.drawLine({start:{x:pos.x,y:pos.y+pos.h},end:{x:pos.x+pos.w,y:pos.y+pos.h},thickness:t,color:c});
           page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x+pos.w,y:pos.y},thickness:t,color:c});
           page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x,y:pos.y+pos.h},thickness:t,color:c});
