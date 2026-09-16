@@ -765,60 +765,37 @@ function setParts(n) {
 }
 
 function buildOrder(total, count) {
-  /* Tibetan-long / Pecha duplex imposition.
+  /* Simple alternating sheet order for Pecha page layout.
    *
-   * Every physical long-page position keeps a consecutive duplex pair:
-   *   1/2, 3/4, 5/6, 7/8, ...
+   * Each selected part count represents the number of pages placed on one
+   * physical sheet.
    *
-   * Front  = first page of each pair, left-to-right.
-   * Back   = second page of each pair, right-to-left.
+   * Odd-numbered sheets use normal order from top to bottom.
+   * Even-numbered sheets use reverse order from top to bottom.
    *
-   * Parts are consecutive blocks. Block sizes are kept even whenever
-   * possible, so an internal page can never be left with a blank back.
-   * If the PDF has an incomplete physical sheet, BLANK placeholders are
-   * inserted automatically at the unused positions. These blanks are not
-   * source pages; they only preserve the correct duplex/cutting geometry.
+   * Examples:
+   *   3 parts:  1,2,3  |  6,5,4  |  7,8,9  |  12,11,10 ...
+   *   4 parts:  1,2,3,4 | 8,7,6,5 | 9,10,11,12 ...
+   *   6 parts:  1,2,3,4,5,6 | 12,11,10,9,8,7 ...
+   *
+   * The original PDF page indexes are preserved; only their output order
+   * changes. If the final sheet is incomplete, it contains only the
+   * remaining source pages (no artificial blank pages are added here).
    */
   if (!Number.isInteger(total) || total <= 0) return [];
   if (!Number.isInteger(count) || count < 2 || count > 6) return [];
 
-  // Keep the consecutive parts as balanced as possible while making all
-  // non-final parts even. For an odd total, only the final part is odd.
-  const base = 2 * Math.floor(total / (2 * count));
-  const remainder = total - base * count;
-  const sizes = Array(count).fill(base);
-
-  if (remainder % 2 === 0) {
-    const extraParts = remainder / 2;
-    for (let i = count - extraParts; i < count; i++) sizes[i] += 2;
-  } else {
-    sizes[count - 1] += 1;
-    const extraParts = (remainder - 1) / 2;
-    for (let i = count - 1 - extraParts; i < count - 1; i++) sizes[i] += 2;
-  }
-
-  const groups = [];
-  let start = 0;
-  for (const size of sizes) {
-    groups.push(Array.from({ length: size }, (_, i) => start + i));
-    start += size;
-  }
-
   const result = [];
-  const maxLen = Math.max(...groups.map(group => group.length));
+  let sheetNumber = 1;
 
-  // One loop = one physical A4 sheet: count FRONT slots followed by
-  // count BACK slots. null means an automatically generated blank page.
-  for (let row = 0; row < maxLen; row += 2) {
-    // FRONT: normal left-to-right order.
-    for (let g = 0; g < count; g++) {
-      result.push(row < groups[g].length ? groups[g][row] : null);
-    }
+  for (let start = 0; start < total; start += count, sheetNumber++) {
+    const end = Math.min(start + count, total);
+    const sheet = Array.from({ length: end - start }, (_, i) => start + i);
 
-    // BACK: reverse the column positions.
-    for (let g = count - 1; g >= 0; g--) {
-      result.push(row + 1 < groups[g].length ? groups[g][row + 1] : null);
-    }
+    // Every second sheet is reversed top-to-bottom.
+    if (sheetNumber % 2 === 0) sheet.reverse();
+
+    result.push(...sheet);
   }
 
   return result;
@@ -1141,7 +1118,7 @@ dropZone.addEventListener("drop", e => {
             usableHmm,
             sheetWmm:sheetW/MM_PT,
             sheetHmm:sheetH/MM_PT,
-            marginMm:Number(pMargin.value)
+            marginMm:0
           }
         };
       }
