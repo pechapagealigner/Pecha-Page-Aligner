@@ -517,7 +517,6 @@ footer{
 .print-size:hover{transform:translateY(-1px);border-color:#aebbd0;}
 .print-size.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 8px 20px rgba(29,95,209,.22);}
 .print-settings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px;}
-.print-settings-centered{grid-template-columns:minmax(240px,420px);justify-content:center;}
 .print-field{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fafbfc;}
 .print-field label{display:block;font-size:12px;font-weight:800;color:#344054;margin-bottom:7px;}
 .print-field select{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px;background:#fff;color:var(--text);}
@@ -527,39 +526,8 @@ footer{
 .print-sheet-title{font-weight:850;font-size:13px;margin-top:8px;}
 .print-sheet-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
 .print-back{margin-top:10px!important;background:#eef2f7!important;color:#263142!important;border:1px solid var(--border)!important;}
-@media(max-width:700px){.print-options,.print-settings,.print-settings-centered{grid-template-columns:1fr;}}
+@media(max-width:700px){.print-options,.print-settings{grid-template-columns:1fr;}}
 
-
-/* Professional UI polish — visual only; no tool logic changed. */
-.card{box-shadow:0 14px 40px rgba(13,27,62,.08);}
-#toolChoice{padding:30px;}
-#toolChoice .section-title{justify-content:center;text-align:center;margin-bottom:22px;}
-#toolChoice .section-title h2{font-size:23px;letter-spacing:-.2px;}
-#toolChoice .section-title p{font-size:13px;}
-#toolChoice .actions{grid-template-columns:repeat(2,minmax(220px,1fr));max-width:760px;margin:0 auto!important;gap:14px;}
-#toolChoice .actions button{min-height:62px;border-radius:16px;font-size:15px;letter-spacing:.1px;position:relative;overflow:hidden;box-shadow:0 9px 22px rgba(20,40,70,.10);}
-#toolChoice .actions button::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.16),transparent 45%);pointer-events:none;}
-#toolChoice .actions button:hover{transform:translateY(-2px);box-shadow:0 13px 28px rgba(20,40,70,.15);}
-#toolChoice .actions button:active{transform:translateY(0);}
-.print-back{display:flex!important;align-items:center;justify-content:center;gap:8px;margin:14px auto 0!important;width:min(100%,330px);min-height:46px!important;border-radius:14px!important;background:#fff!important;color:#344054!important;border:1px solid #d7deea!important;box-shadow:0 5px 14px rgba(20,40,70,.06)!important;font-size:13px!important;}
-.print-back::before{content:"←";font-size:18px;line-height:1;}
-.print-back:hover{background:#f7f9fc!important;border-color:#b8c5d8!important;transform:translateY(-1px);box-shadow:0 8px 18px rgba(20,40,70,.10)!important;}
-.print-back:active{transform:translateY(0);}
-.print-options{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.print-size{border:1px solid var(--border);border-radius:13px;padding:13px 16px;background:#f7f9fc;color:#263142;font-weight:800;cursor:pointer;transition:.18s ease;}
-.print-size:hover{transform:translateY(-1px);border-color:#aebbd0;background:#fff;}
-.print-size.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 8px 20px rgba(29,95,209,.20);}
-.print-field select{min-height:44px;border-radius:12px;outline:none;transition:.18s ease;}
-.print-field select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(29,95,209,.10);}
-.actions button{min-height:46px;}
-.upload{transition:.18s ease;}
-.upload:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(20,40,70,.06);}
-@media(max-width:700px){
-  #toolChoice{padding:20px 15px;}
-  #toolChoice .actions{grid-template-columns:1fr;}
-  .print-options{grid-template-columns:1fr;}
-  .print-back{width:100%;}
-}
 </style>
 
 <!-- Google tag (gtag.js) -->
@@ -664,13 +632,19 @@ footer{
         <button class="print-size" data-size="B4" type="button">B4</button>
       </div>
 
-      <div class="print-settings print-settings-centered">
+      <div class="print-settings">
         <div class="print-field">
           <label for="printOrientation">Sheet orientation</label>
           <select id="printOrientation">
             <option value="auto" selected>Auto (match Pecha page)</option>
             <option value="portrait">Portrait</option>
             <option value="landscape">Landscape</option>
+          </select>
+        </div>
+        <div class="print-field">
+          <label for="printMargin">Page margin / gap</label>
+          <select id="printMargin" disabled>
+            <option value="0" selected>0 mm</option>
           </select>
         </div>
       </div>
@@ -682,7 +656,7 @@ footer{
       <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
 
       <div id="printStatus" class="status"></div>
-      <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. A single 0.15 mm cutting stroke is placed only around Original Page 1; no cutting strokes are added to later pages or between pages. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
+      <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The complete group of pages is centered on every sheet. The downloaded PDF does not rasterize or JPEG-compress the source pages. Every source PDF page keeps its exact original size. Pages are never scaled down. A single 0.15 mm cutting stroke is placed only around Original Page 1; no cutting strokes are added to later pages or between pages. If even one page is too large for the selected sheet, the tool will show a warning and will not create the printing PDF.</p>
       <div id="printPreview" class="print-preview-grid"></div>
     </div>
   </section>
@@ -1066,6 +1040,7 @@ dropZone.addEventListener("drop", e => {
   const pDownload=document.getElementById('printDownloadBtn');
   const pBack=document.getElementById('printBackBtn');
   const pOrientation=document.getElementById('printOrientation');
+  const pMargin=document.getElementById('printMargin');
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
@@ -1127,7 +1102,7 @@ dropZone.addEventListener("drop", e => {
             usableHmm,
             sheetWmm:sheetW/MM_PT,
             sheetHmm:sheetH/MM_PT,
-            marginMm:0
+            marginMm:Number(pMargin.value)
           }
         };
       }
@@ -1162,8 +1137,14 @@ dropZone.addEventListener("drop", e => {
 
     for(const sheet of pPlan){
       const page=out.addPage([sheet.sheetW,sheet.sheetH]);
-      let y=sheet.sheetH;
       const placements=[];
+
+      // Keep the same 0 mm gap, but center the COMPLETE group of Pecha pages
+      // on every physical sheet instead of starting the group at the top.
+      // Each individual page is also centered horizontally within the sheet.
+      const groupH=sheet.items.reduce((sum,item)=>sum+item.drawH,0)
+                       + Math.max(0,sheet.items.length-1)*GAP_PT;
+      let y=(sheet.sheetH+groupH)/2;
 
       for(const item of sheet.items){
         y-=item.drawH;
@@ -1217,7 +1198,7 @@ dropZone.addEventListener("drop", e => {
     document.querySelectorAll('.print-size').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');pSize=btn.dataset.size;pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];
   }));
-  pOrientation.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];});
+  [pOrientation,pMargin].forEach(el=>el.addEventListener('change',()=>{pDownload.disabled=true;pPreview.innerHTML='';pPlan=[];}));
   pInput.addEventListener('change',e=>loadPrint(e.target.files[0]));
 
   async function loadPrint(file){
