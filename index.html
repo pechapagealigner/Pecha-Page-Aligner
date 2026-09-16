@@ -1124,7 +1124,7 @@ dropZone.addEventListener("drop", e => {
   fitConfirmBtn.addEventListener('click',()=>{
     hideFitWarning();
     fitAccepted=true;
-    if(fitWarningResolver){const r=fitWarningResolver;r(null);fitWarningResolver=null;}
+    if(fitWarningResolver){const r=fitWarningResolver;r(true);fitWarningResolver=null;}
   });
 
   fitCancelBtn.addEventListener('click',()=>{
@@ -1145,7 +1145,7 @@ dropZone.addEventListener("drop", e => {
 
   let pFile=null, pDoc=null, pSize='A4', pPlan=[];
   const paperSizes={A4:[595.276,841.89],A3:[841.89,1190.55],B4:[708.66,1000.63]};
-  // Printing rule: source pages stay at exactly 100% size.
+  // Printing rule: source pages stay at exactly 100% unless the user explicitly chooses Fit.
   // There is no gap/margin between vertically stacked Pecha pages.
   const GAP_PT=0;
   const MM_PT=72/25.4;
@@ -1361,7 +1361,7 @@ dropZone.addEventListener("drop", e => {
 
       const fittedCount=pPlan.reduce((n,s)=>n+s.items.filter(item=>item.scaled).length,0);
       const fitNote=fittedCount
-        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet.`
+        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet. The 0.15 mm cutting stroke is unchanged.`
         : ` All source pages remain at their exact original size (100%).`;
 
       pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${fitNote} You can now download the fitted PDF.`,'ok');
@@ -1403,7 +1403,7 @@ dropZone.addEventListener("drop", e => {
 
       const fittedCount=pPlan.reduce((n,s)=>n+s.items.filter(item=>item.scaled).length,0);
       const fitNote=fittedCount
-        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet.`
+        ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet. The 0.15 mm cutting stroke is unchanged.`
         : ` Original PDF pages remain at their exact original size.`;
 
       pSetStatus(`PDF downloaded successfully.${fitNote}`,'ok');
