@@ -1101,8 +1101,8 @@ dropZone.addEventListener("drop", e => {
       `The original PDF page is <strong>${issue.pageWmm.toFixed(1)} × ${issue.pageHmm.toFixed(1)} mm</strong>, ` +
       `but the selected <strong>${issue.sheetName} ${issue.orientation}</strong> sheet is ` +
       `<strong>${issue.sheetWmm.toFixed(1)} × ${issue.sheetHmm.toFixed(1)} mm</strong>.<br><br>` +
-      `The original page is larger than the selected sheet. Do you want to <strong>Fit</strong> it ` +
-      `proportionally inside the sheet?`;
+      `Choose <strong>Fit</strong> to resize the complete page proportionally so it fits fully inside the selected sheet. ` +
+      `Choose <strong>Cancel</strong> to keep the original size.`;
     fitWarning.classList.remove('hidden');
     fitConfirmBtn.focus();
   }
@@ -1340,7 +1340,7 @@ dropZone.addEventListener("drop", e => {
         if(!approved){
           pPreview.innerHTML='';
           pDownload.disabled=true;
-          pSetStatus('Preview cancelled. No pages were resized. Choose a larger paper size or orientation, or press Preview again and choose Fit.','error');
+          pSetStatus('No PDF was created. Choose a larger paper size or orientation, or press Preview again and choose Fit.','error');
           return;
         }
         pSetStatus('<span class="loading"></span>Fitting oversized page(s) proportionally...');
@@ -1364,7 +1364,7 @@ dropZone.addEventListener("drop", e => {
         ? ` ${fittedCount} oversized page${fittedCount===1?' was':'s were'} fitted proportionally to the selected sheet.`
         : ` All source pages remain at their exact original size (100%).`;
 
-      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${fitNote}`,'ok');
+      pSetStatus(`Preview ready: ${pPlan.length} sheet${pPlan.length===1?'':'s'} created.${fitNote} You can now download the fitted PDF.`,'ok');
     }catch(e){console.error(e);pSetStatus('Could not create the printing layout preview.','error');}
     finally{pPreviewBtn.disabled=false;}
   });
