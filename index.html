@@ -545,6 +545,7 @@ footer{
 .print-back:active{transform:translateY(0);}
 .back-tool-btn{
   width:100%;
+  text-align:center;
   margin-top:12px;
   padding:12px 18px;
   border:1px solid #cfd8e6;
@@ -629,6 +630,7 @@ footer{
     </label>
 
     <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+    <button id="alignmentBackBtn" class="back-tool-btn" type="button">Back to PDF Tools</button>
 
     <div id="controls" class="controls hidden">
       <span class="label">Choose alignment</span>
@@ -645,8 +647,6 @@ footer{
         <button id="previewBtn" class="primary" type="button">Preview Alignment</button>
         <button id="downloadBtn" class="success" type="button" disabled>Download PDF</button>
       </div>
-      <button id="alignmentBackBtn" class="back-tool-btn" type="button">Back to PDF Tools</button>
-
       <div id="status" class="status"></div>
 
       <p class="note">
@@ -672,6 +672,7 @@ footer{
       <span id="printFileName" class="upload-file">Click here or drag & drop a PDF from your computer</span>
     </label>
     <input id="printPdfInput" type="file" accept="application/pdf,.pdf">
+    <button id="printBackBtn" class="back-tool-btn" type="button">Back to PDF Tools</button>
 
     <div id="printControls" class="controls hidden">
       <span class="label">Choose paper size</span>
@@ -696,8 +697,6 @@ footer{
         <button id="printPreviewBtn" class="primary" type="button">Preview Layout</button>
         <button id="printDownloadBtn" class="success" type="button" disabled>Download PDF</button>
       </div>
-      <button id="printBackBtn" class="actions print-back" type="button">Back to PDF Tools</button>
-
       <div id="printStatus" class="status"></div>
       <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The complete group of pages is centered on every sheet. The downloaded PDF does not rasterize or JPEG-compress the source pages. If a source page is larger than the selected sheet, a warning will ask whether to fit it proportionally to the selected A4, A3 or B4 sheet. A 0.15 mm cutting stroke is added at output positions 1, 51, 101, 151, 201, and so on. All other printing arrangement rules remain unchanged.</p>
       <div id="printPreview" class="print-preview-grid"></div>
