@@ -612,6 +612,7 @@ footer{
     <div class="actions" style="margin-top:16px">
       <button id="openAlignment" class="primary" type="button">Page Alignment</button>
       <button id="openPrinting" class="success" type="button">Printing Layout</button>
+      <button id="openCombine" class="primary" type="button">Combine Layout</button>
     </div>
   </section>
 
@@ -700,6 +701,52 @@ footer{
       <div id="printStatus" class="status"></div>
       <p class="note">Pages are placed vertically with 0 mm margin and 0 mm gap. The complete group of pages is centered on every sheet. The downloaded PDF does not rasterize or JPEG-compress the source pages. If a source page is larger than the selected sheet, a warning will ask whether to fit it proportionally to the selected A4, A3 or B4 sheet. A 0.15 mm cutting stroke is added at output positions 1, 51, 101, 151, 201, and so on. All other printing arrangement rules remain unchanged.</p>
       <div id="printPreview" class="print-preview-grid"></div>
+    </div>
+  </section>
+
+  <section id="combineTool" class="card hidden">
+    <div class="section-title">
+      <div>
+        <h2>Combine Layout</h2>
+        <p>Automatically select 2–6 part Pecha alignment from the selected sheet, then apply the printing layout.</p>
+      </div>
+    </div>
+
+    <label class="upload" for="combinePdfInput">
+      <div class="upload-icon">↑</div>
+      <span class="upload-title">Choose PDF</span>
+      <span id="combineFileName" class="upload-file">Click here or drag & drop a PDF from your computer</span>
+    </label>
+    <input id="combinePdfInput" type="file" accept="application/pdf,.pdf">
+    <button id="combineBackBtn" class="back-tool-btn" type="button">Back to PDF Tools</button>
+
+    <div id="combineControls" class="controls hidden">
+      <span class="label">Choose paper size</span>
+      <div class="print-options">
+        <button class="print-size combine-size active" data-size="A4" type="button">A4</button>
+        <button class="print-size combine-size" data-size="A3" type="button">A3</button>
+        <button class="print-size combine-size" data-size="B4" type="button">B4</button>
+      </div>
+
+      <div class="print-settings">
+        <div class="print-field">
+          <label for="combineOrientation">Sheet orientation</label>
+          <select id="combineOrientation">
+            <option value="auto" selected>Auto (match Pecha page)</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="combinePreviewBtn" class="primary" type="button">Preview Layout</button>
+        <button id="combineDownloadBtn" class="success" type="button" disabled>Download PDF</button>
+      </div>
+      <div id="combineStatus" class="status"></div>
+      <div id="combineCalculation" class="combine-calculation hidden" aria-live="polite"></div>
+      <p class="note">Combine Layout first calculates how many Pecha pages physically fit vertically on the selected sheet. That number automatically selects the existing 2, 3, 4, 5 or 6 part Page Alignment logic. The resulting aligned pages are then arranged using the same Printing Layout placement rules: centered vertically, 0 mm margin, 0 mm gap, proportional fitting when approved, and a 0.15 mm cutting outline on sheets 1, 51, 101, 151, and so on.</p>
+      <div id="combinePreview" class="print-preview-grid"></div>
     </div>
   </section>
 
@@ -1066,8 +1113,11 @@ dropZone.addEventListener("drop", e => {
 </script>
 
 
-<script>
+<script type="module">
+import * as combinePdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+combinePdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
 (() => {
+  const pdfjsLib = combinePdfjsLib;
   const choice = document.getElementById('toolChoice');
   const alignment = document.getElementById('alignmentTool');
   const printing = document.getElementById('printingTool');
@@ -1501,6 +1551,649 @@ dropZone.addEventListener("drop", e => {
   });
 })();
 </script>
+<script type="module">
+import * as combinePdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+combinePdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+(() => {
+  const pdfjsLib = combinePdfjsLib;
+  const PDFLib = window.PDFLib;
+  if (!pdfjsLib) throw new Error('PDF.js failed to load for Combine Layout.');
+  if (!PDFLib) throw new Error('pdf-lib failed to load for Combine Layout.');
+
+  const choice = document.getElementById('toolChoice');
+  const alignment = document.getElementById('alignmentTool');
+  const printing = document.getElementById('printingTool');
+  const combine = document.getElementById('combineTool');
+  const openCombine = document.getElementById('openCombine');
+  const combineBack = document.getElementById('combineBackBtn');
+
+  function showCombine() {
+    choice.classList.add('hidden');
+    alignment.classList.add('hidden');
+    printing.classList.add('hidden');
+    combine.classList.remove('hidden');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  if (!openCombine || !combineBack) throw new Error('Combine Layout controls are missing from the HTML.');
+
+  openCombine.addEventListener('click', showCombine);
+  combineBack.addEventListener('click', () => {
+    closeCombineFitModal();
+    combine.classList.add('hidden');
+    alignment.classList.add('hidden');
+    printing.classList.add('hidden');
+    choice.classList.remove('hidden');
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+
+  const cInput = document.getElementById('combinePdfInput');
+  const cName = document.getElementById('combineFileName');
+  const cControls = document.getElementById('combineControls');
+  const cStatus = document.getElementById('combineStatus');
+  const cCalculation = document.getElementById('combineCalculation');
+  const cPreview = document.getElementById('combinePreview');
+  const cPreviewBtn = document.getElementById('combinePreviewBtn');
+  const cDownload = document.getElementById('combineDownloadBtn');
+  const cOrientation = document.getElementById('combineOrientation');
+  const cFitModal = document.getElementById('combineFitModal');
+  const cFitMessage = document.getElementById('combineFitMessage');
+  const cFitConfirm = document.getElementById('combineFitConfirm');
+  const cFitCancel = document.getElementById('combineFitCancel');
+
+  if (!cInput || !cPreviewBtn || !cDownload || !cOrientation || !cFitModal || !cFitConfirm || !cFitCancel) {
+    throw new Error('Combine Layout HTML controls are incomplete.');
+  }
+
+  let cFile = null;
+  let cDoc = null;
+  let cSize = 'A4';
+  let cFitApproved = false;
+  let cParts = 0;
+  let cPlan = [];
+
+  const cPaperSizes = {
+    A4: [595.276, 841.89],
+    A3: [841.89, 1190.55],
+    B4: [708.66, 1000.63]
+  };
+  const C_GAP_PT = 0;
+  const C_MM_PT = 72 / 25.4;
+  const C_CUT_STROKE_PT = 0.15 * C_MM_PT;
+
+  function cSetStatus(text, type='') {
+    cStatus.innerHTML = text;
+    cStatus.className = 'status ' + type;
+  }
+
+  function cGetSheetSize(firstW, firstH) {
+    const base = cPaperSizes[cSize];
+    let w = base[0], h = base[1];
+    const mode = cOrientation.value;
+    if (mode === 'landscape' || (mode === 'auto' && firstW > firstH)) [w, h] = [h, w];
+    return [w, h];
+  }
+
+  function closeCombineFitModal() {
+    if (!cFitModal) return;
+    cFitModal.classList.remove('open');
+    cFitModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openCombineFitModal(issue) {
+    if (!cFitModal) return;
+    const orientation = issue.sheetW > issue.sheetH ? 'Landscape' : 'Portrait';
+    cFitMessage.innerHTML =
+      `<strong>Original Page ${issue.page}</strong> is larger than the selected <strong>${issue.sheetName} ${orientation}</strong> sheet.<br><br>` +
+      `Original page: <strong>${issue.pageWmm.toFixed(1)} × ${issue.pageHmm.toFixed(1)} mm</strong><br>` +
+      `Selected sheet: <strong>${issue.sheetWmm.toFixed(1)} × ${issue.sheetHmm.toFixed(1)} mm</strong><br><br>` +
+      `Do you want to <strong>proportionally fit</strong> this Pecha page to the selected sheet? Width and height will be scaled together without stretching.`;
+    cFitModal.classList.add('open');
+    cFitModal.setAttribute('aria-hidden', 'false');
+  }
+
+  async function cFindOversizedPage() {
+    if (!cDoc) return null;
+    const first = await cDoc.getPage(1);
+    const firstVp = first.getViewport({scale:1});
+    const [sheetW, sheetH] = cGetSheetSize(firstVp.width, firstVp.height);
+    for (let i = 0; i < cDoc.numPages; i++) {
+      const pg = await cDoc.getPage(i + 1);
+      const vp = pg.getViewport({scale:1});
+      if (vp.width > sheetW + 0.01 || vp.height > sheetH + 0.01) {
+        return {
+          page: i + 1,
+          pageWmm: vp.width / C_MM_PT,
+          pageHmm: vp.height / C_MM_PT,
+          sheetName: cSize,
+          sheetWmm: sheetW / C_MM_PT,
+          sheetHmm: sheetH / C_MM_PT,
+          sheetW,
+          sheetH
+        };
+      }
+    }
+    return null;
+  }
+
+  async function cGetPageMetrics() {
+    const first = await cDoc.getPage(1);
+    const firstVp = first.getViewport({scale:1});
+    const [sheetW, sheetH] = cGetSheetSize(firstVp.width, firstVp.height);
+    let scale = 1;
+
+    if (firstVp.width > sheetW + 0.01 || firstVp.height > sheetH + 0.01) {
+      if (!cFitApproved) return {ok:false, needsFit:true, sheetW, sheetH, srcW:firstVp.width, srcH:firstVp.height};
+      scale = Math.min(sheetW / firstVp.width, sheetH / firstVp.height);
+    }
+
+    const drawW = firstVp.width * scale;
+    const drawH = firstVp.height * scale;
+    const fitCount = Math.floor((sheetH + C_GAP_PT + 0.01) / (drawH + C_GAP_PT));
+
+    return {ok:true, sheetW, sheetH, srcW:firstVp.width, srcH:firstVp.height, scale, drawW, drawH, fitCount};
+  }
+
+  function cShowCalculation(metrics, result=null) {
+    if (!cCalculation) return;
+    if (!metrics || !metrics.ok) {
+      cCalculation.classList.add('hidden');
+      cCalculation.innerHTML = '';
+      return;
+    }
+    const orientation = cOrientation.value === 'auto'
+      ? (metrics.sheetW > metrics.sheetH ? 'Landscape' : 'Portrait')
+      : (cOrientation.value === 'landscape' ? 'Landscape' : 'Portrait');
+    const pageW = metrics.srcW / C_MM_PT;
+    const pageH = metrics.srcH / C_MM_PT;
+    const sheetW = metrics.sheetW / C_MM_PT;
+    const sheetH = metrics.sheetH / C_MM_PT;
+    const fit = metrics.fitCount;
+    const partText = (fit >= 2 && fit <= 6) ? `${fit}-Part Page Alignment` : 'No matching 2–6 part alignment';
+    cCalculation.innerHTML =
+      `<div class="calc-title">Combine Layout — Automatic Calculation</div>` +
+      `<div class="calc-line">Selected sheet: <strong>${cSize} ${orientation}</strong> (${sheetW.toFixed(1)} × ${sheetH.toFixed(1)} mm)</div>` +
+      `<div class="calc-line">Original Pecha page: ${pageW.toFixed(1)} × ${pageH.toFixed(1)} mm</div>` +
+      `<div class="calc-line">Pages that fit vertically: <strong>${fit}</strong></div>` +
+      `<div class="calc-line">Alignment selected: <strong>${partText}</strong></div>`;
+    cCalculation.classList.remove('hidden');
+  }
+
+  async function cCalculateParts() {
+    const metrics = await cGetPageMetrics();
+    if (!metrics.ok) return metrics;
+
+    // Combine Layout is intentionally limited to the existing Page Alignment
+    // choices. A physical fit of 1 or more than 6 does not map to an existing
+    // alignment tool, so the user is asked to choose another sheet/orientation.
+    if (metrics.fitCount < 2 || metrics.fitCount > 6) {
+      return {...metrics, invalidFit:true};
+    }
+
+    return {...metrics, parts:metrics.fitCount};
+  }
+
+  // This is the existing Page Alignment algorithm used by the original tool.
+  // Combine Layout calls it without changing the original Page Alignment tool.
+  function cBuildOrder(total, count) {
+    // Combine Layout must use the same Page Alignment algorithm as the
+    // original alignment tool. The main tool's function is intentionally
+    // kept private, so this is the identical algorithm copied here once.
+    if (!Number.isInteger(total) || total <= 0) return [];
+    if (!Number.isInteger(count) || count < 2 || count > 6) return [];
+
+    const base = 2 * Math.floor(total / (2 * count));
+    const remainder = total - base * count;
+    const sizes = Array(count).fill(base);
+
+    if (remainder % 2 === 0) {
+      const extraParts = remainder / 2;
+      for (let i = count - extraParts; i < count; i++) sizes[i] += 2;
+    } else {
+      sizes[count - 1] += 1;
+      const extraParts = (remainder - 1) / 2;
+      for (let i = count - 1 - extraParts; i < count - 1; i++) sizes[i] += 2;
+    }
+
+    const groups = [];
+    let start = 0;
+    for (const size of sizes) {
+      groups.push(Array.from({length:size}, (_,i) => start + i));
+      start += size;
+    }
+
+    const result = [];
+    const maxLen = Math.max(...groups.map(group => group.length));
+    for (let row = 0; row < maxLen; row += 2) {
+      for (let g = 0; g < count; g++) {
+        result.push(row < groups[g].length ? groups[g][row] : null);
+      }
+      for (let g = count - 1; g >= 0; g--) {
+        result.push(row + 1 < groups[g].length ? groups[g][row + 1] : null);
+      }
+    }
+    return result;
+  }
+
+  async function cMakePlan() {
+    if (!cDoc) return {ok:false, plan:[], issue:null};
+
+    const metrics = await cCalculateParts();
+    if (!metrics.ok) return {ok:false, plan:[], needsFit:true, issue:{
+      page:1,
+      pageWmm:metrics.srcW/C_MM_PT,
+      pageHmm:metrics.srcH/C_MM_PT,
+      sheetName:cSize,
+      sheetWmm:metrics.sheetW/C_MM_PT,
+      sheetHmm:metrics.sheetH/C_MM_PT,
+      sheetW:metrics.sheetW,
+      sheetH:metrics.sheetH
+    }};
+
+    if (metrics.invalidFit) return {ok:false, plan:[], invalidFit:true, fitCount:metrics.fitCount};
+
+    cParts = metrics.parts;
+    const order = cBuildOrder(cDoc.numPages, cParts);
+    if (!order.length) return {ok:false, plan:[], invalidOrder:true};
+
+    const plan = [];
+    let sheet = [];
+    let usedH = 0;
+
+    // The Printing Layout stage works on the already-aligned page sequence.
+    // Each selected sheet receives the same number of vertically stacked
+    // Pecha pages that was calculated above.
+    for (const originalIndex of order) {
+      let drawW = metrics.drawW;
+      let drawH = metrics.drawH;
+      const needed = sheet.length ? C_GAP_PT + drawH : drawH;
+
+      if (sheet.length && usedH + needed > metrics.sheetH + 0.01) {
+        plan.push({items:sheet, sheetW:metrics.sheetW, sheetH:metrics.sheetH});
+        sheet = [];
+        usedH = 0;
+      }
+
+      sheet.push({
+        index:originalIndex,
+        scale:metrics.scale,
+        drawW,
+        drawH,
+        srcW:metrics.srcW,
+        srcH:metrics.srcH,
+        scaled:metrics.scale < 0.999999
+      });
+      usedH += sheet.length === 1 ? drawH : C_GAP_PT + drawH;
+    }
+
+    if (sheet.length) plan.push({items:sheet, sheetW:metrics.sheetW, sheetH:metrics.sheetH});
+
+    return {ok:true, plan, parts:cParts, fitCount:metrics.fitCount, order};
+  }
+
+  async function cBuildPdf() {
+    if (!cFile || !cDoc) return null;
+    const result = await cMakePlan();
+    if (!result.ok) return {error:result};
+    cPlan = result.plan;
+
+    const src = await PDFLib.PDFDocument.load(await cFile.arrayBuffer());
+    const out = await PDFLib.PDFDocument.create();
+    const embedded = [];
+    for (let i = 0; i < src.getPageCount(); i++) embedded.push(await out.embedPage(src.getPage(i)));
+
+    for (let sheetIndex = 0; sheetIndex < cPlan.length; sheetIndex++) {
+      const sheet = cPlan[sheetIndex];
+      const page = out.addPage([sheet.sheetW, sheet.sheetH]);
+      const groupH = sheet.items.reduce((sum,item) => sum + item.drawH, 0) +
+                     Math.max(0, sheet.items.length - 1) * C_GAP_PT;
+      let y = (sheet.sheetH + groupH) / 2;
+      const placements = [];
+
+      for (const item of sheet.items) {
+        y -= item.drawH;
+        const x = (sheet.sheetW - item.drawW) / 2;
+
+        if (item.index !== null) {
+          page.drawPage(embedded[item.index], {
+            x, y, width:item.drawW, height:item.drawH
+          });
+        }
+
+        placements.push({x,y,w:item.drawW,h:item.drawH});
+        y -= C_GAP_PT;
+      }
+
+      // Same sheet-based 0.15 mm cutting outline rule as Printing Layout.
+      if ((sheetIndex % 50) === 0) {
+        const t = C_CUT_STROKE_PT;
+        const c = PDFLib.rgb(0,0,0);
+        for (const pos of placements) {
+          page.drawLine({start:{x:pos.x,y:pos.y+pos.h},end:{x:pos.x+pos.w,y:pos.y+pos.h},thickness:t,color:c});
+          page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x+pos.w,y:pos.y},thickness:t,color:c});
+          page.drawLine({start:{x:pos.x,y:pos.y},end:{x:pos.x,y:pos.y+pos.h},thickness:t,color:c});
+          page.drawLine({start:{x:pos.x+pos.w,y:pos.y},end:{x:pos.x+pos.w,y:pos.y+pos.h},thickness:t,color:c});
+        }
+      }
+    }
+
+    return out;
+  }
+
+  async function cRenderPreview() {
+    cPreview.innerHTML = '';
+    const limit = Math.min(cPlan.length, 6);
+    const previewScale = 0.34;
+
+    for (let i = 0; i < limit; i++) {
+      const sheet = cPlan[i];
+      cSetStatus(`<span class="loading"></span>Rendering Combine preview: sheet ${i + 1} of ${limit}...`);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(sheet.sheetW * previewScale));
+      canvas.height = Math.max(1, Math.round(sheet.sheetH * previewScale));
+      const ctx = canvas.getContext('2d', {alpha:false});
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const groupH = sheet.items.reduce((sum, item) => sum + item.drawH, 0) +
+                     Math.max(0, sheet.items.length - 1) * C_GAP_PT;
+      let y = (sheet.sheetH + groupH) / 2;
+      const placements = [];
+
+      for (const item of sheet.items) {
+        y -= item.drawH;
+        const x = (sheet.sheetW - item.drawW) / 2;
+        placements.push({x, y, w:item.drawW, h:item.drawH, index:item.index});
+
+        // null means an intentional BLANK position from Page Alignment.
+        if (item.index !== null && item.index !== undefined) {
+          try {
+            const pg = await cDoc.getPage(item.index + 1);
+            const targetScale = Math.min(
+              (item.drawW * previewScale) / Math.max(1, item.srcW),
+              (item.drawH * previewScale) / Math.max(1, item.srcH)
+            );
+            const vp = pg.getViewport({scale:targetScale});
+            const temp = document.createElement('canvas');
+            temp.width = Math.max(1, Math.ceil(vp.width));
+            temp.height = Math.max(1, Math.ceil(vp.height));
+            const tempCtx = temp.getContext('2d', {alpha:false});
+            tempCtx.fillStyle = '#ffffff';
+            tempCtx.fillRect(0, 0, temp.width, temp.height);
+            await pg.render({canvasContext:tempCtx, viewport:vp}).promise;
+
+            const canvasX = x * previewScale;
+            const canvasY = (sheet.sheetH - y - item.drawH) * previewScale;
+            ctx.drawImage(
+              temp,
+              canvasX,
+              canvasY,
+              item.drawW * previewScale,
+              item.drawH * previewScale
+            );
+          } catch (pageError) {
+            // Do not let one problematic PDF page cancel the entire preview.
+            console.warn('Combine preview page render failed:', item.index + 1, pageError);
+            const bx = x * previewScale;
+            const by = (sheet.sheetH - y - item.drawH) * previewScale;
+            ctx.save();
+            ctx.strokeStyle = '#c7cfda';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(bx, by, item.drawW * previewScale, item.drawH * previewScale);
+            ctx.fillStyle = '#667085';
+            ctx.font = `${Math.max(8, Math.round(10 * previewScale / 0.34))}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`Page ${item.index + 1}`, bx + item.drawW * previewScale / 2, by + item.drawH * previewScale / 2);
+            ctx.restore();
+          }
+        }
+
+        y -= C_GAP_PT;
+      }
+
+      // Same sheet-based 0.15 mm cutting outline rule as Printing Layout.
+      if ((i % 50) === 0) {
+        const t = Math.max(0.5, C_CUT_STROKE_PT * previewScale);
+        ctx.save();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = t;
+        for (const pos of placements) {
+          const px = pos.x * previewScale;
+          const py = (sheet.sheetH - pos.y - pos.h) * previewScale;
+          ctx.strokeRect(px, py, pos.w * previewScale, pos.h * previewScale);
+        }
+        ctx.restore();
+      }
+
+      const box = document.createElement('div');
+      box.className = 'print-sheet';
+      const img = document.createElement('img');
+      img.src = canvas.toDataURL('image/png');
+      img.alt = `Combine Layout Sheet ${i + 1}`;
+      const title = document.createElement('div');
+      title.className = 'print-sheet-title';
+      title.textContent = `Sheet ${i + 1} / ${cPlan.length}`;
+      const count = sheet.items.length;
+      const fitted = sheet.items.filter(item => item.scaled).length;
+      const sub = document.createElement('div');
+      sub.className = 'print-sheet-sub';
+      sub.textContent = `${cSize} • ${count} position${count === 1 ? '' : 's'} • ${cParts}-part alignment${fitted ? ' • proportional fit applied' : ''}`;
+      box.append(img, title, sub);
+      cPreview.appendChild(box);
+
+      // Give the browser a rendering opportunity between sheets.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
+    if (cPlan.length > limit) {
+      const more = document.createElement('div');
+      more.className = 'note';
+      more.textContent = `Preview shows the first ${limit} sheets. Download includes all ${cPlan.length} sheets.`;
+      cPreview.appendChild(more);
+    }
+  }
+
+  function cReset() {
+    cFitApproved = false;
+    cParts = 0;
+    cPlan = [];
+    cDownload.disabled = true;
+    cPreview.innerHTML = '';
+    if (cCalculation) { cCalculation.classList.add('hidden'); cCalculation.innerHTML = ''; }
+  }
+
+  document.querySelectorAll('.combine-size').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.combine-size').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    cSize = btn.dataset.size;
+    cReset();
+  }));
+
+  cOrientation.addEventListener('change', cReset);
+
+  cInput.addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f || (!f.type.includes('pdf') && !f.name.toLowerCase().endsWith('.pdf'))) {
+      cSetStatus('Please choose a PDF file.', 'error');
+      return;
+    }
+    cFile = f;
+    cName.textContent = f.name;
+    cControls.classList.remove('hidden');
+    cReset();
+    cSetStatus('<span class="loading"></span>Loading PDF...');
+    try {
+      const data = new Uint8Array(await f.arrayBuffer());
+      cDoc = await pdfjsLib.getDocument({data}).promise;
+      cSetStatus(`${cDoc.numPages} pages loaded. Choose paper size and preview the combined layout.`, 'ok');
+    } catch (e) {
+      console.error(e);
+      cDoc = null;
+      cSetStatus('Could not read this PDF. Please choose another PDF.', 'error');
+    }
+  });
+
+  async function createCombinePreview() {
+    if (!cDoc) {
+      cSetStatus('Please choose a PDF first.', 'error');
+      return false;
+    }
+
+    cPreviewBtn.disabled = true;
+    cDownload.disabled = true;
+    cSetStatus('<span class="loading"></span>Checking page size...');
+
+    try {
+      const oversized = await cFindOversizedPage();
+      if (oversized && !cFitApproved) {
+        cPreview.innerHTML = '';
+        openCombineFitModal(oversized);
+        cSetStatus('The selected sheet is smaller than the original Pecha page. Please choose Fit to Selected Sheet or Cancel.', 'error');
+        return false;
+      }
+
+      cSetStatus('<span class="loading"></span>Calculating automatic alignment and printing layout...');
+      const previewMetrics = await cGetPageMetrics();
+      if (previewMetrics.ok) cShowCalculation(previewMetrics);
+
+      const result = await cMakePlan();
+
+      if (result.needsFit) {
+        openCombineFitModal(result.issue);
+        cSetStatus('Please choose Fit to Selected Sheet or Cancel.', 'error');
+        return false;
+      }
+
+      if (result.invalidFit) {
+        cSetStatus(`This ${cSize} ${cOrientation.value === 'auto' ? 'sheet' : cOrientation.value + ' sheet'} fits ${result.fitCount} Pecha pages. Combine Layout supports 2–6 parts, so please choose another paper size or orientation.`, 'error');
+        return false;
+      }
+
+      if (!result.ok) throw new Error('Combine Layout plan could not be created.');
+
+      cPlan = result.plan;
+      cParts = result.parts;
+      await cRenderPreview();
+      cDownload.disabled = false;
+
+      const fittedCount = cPlan.reduce((n,s) => n + s.items.filter(item => item.scaled).length, 0);
+      cSetStatus(`Preview ready: ${cParts}-part Page Alignment selected automatically. ${cPlan.length} sheet${cPlan.length===1?'':'s'} created.` +
+        (fittedCount ? ` ${fittedCount} page${fittedCount===1?' was':'s were'} proportionally fitted to ${cSize}.` : ''), 'ok');
+      return true;
+    } catch (e) {
+      console.error('Combine Layout Preview Error:', e);
+      cSetStatus('Could not create the Combine Layout preview. Please try again.', 'error');
+      return false;
+    } finally {
+      cPreviewBtn.disabled = false;
+    }
+  }
+
+  cFitConfirm.addEventListener('click', async () => {
+    cFitApproved = true;
+    closeCombineFitModal();
+    await createCombinePreview();
+  });
+
+  cFitCancel.addEventListener('click', () => {
+    cFitApproved = false;
+    closeCombineFitModal();
+    cDownload.disabled = true;
+    cPreview.innerHTML = '';
+    cSetStatus('Cancelled. The original page was not resized and no Combine Layout PDF was created.', 'error');
+  });
+
+  cFitModal.addEventListener('click', e => {
+    if (e.target === cFitModal) cFitCancel.click();
+  });
+
+  cPreviewBtn.addEventListener('click', async () => {
+    // A fresh Preview click starts a fresh fit decision.
+    cFitApproved = false;
+    await createCombinePreview();
+  });
+
+  cDownload.addEventListener('click', async () => {
+    if (!cFile || !cDoc) return;
+    cDownload.disabled = true;
+    cPreviewBtn.disabled = true;
+    cSetStatus('<span class="loading"></span>Creating combined print-ready PDF...');
+    try {
+      const oversized = await cFindOversizedPage();
+      if (oversized && !cFitApproved) {
+        openCombineFitModal(oversized);
+        cSetStatus('Please choose Fit to Selected Sheet or Cancel.', 'error');
+        return;
+      }
+
+      const out = await cBuildPdf();
+      if (!out || out.error) {
+        if (out && out.error && out.error.invalidFit) {
+          cSetStatus(`This selected sheet does not map to an existing 2–6 part alignment: it fits ${out.error.fitCount} Pecha pages.`, 'error');
+          return;
+        }
+        if (out && out.error && out.error.needsFit) {
+          openCombineFitModal(out.error.issue);
+          cSetStatus('Please choose Fit to Selected Sheet or Cancel.', 'error');
+          return;
+        }
+        throw new Error('Combine Layout PDF could not be built.');
+      }
+
+      const bytes = await out.save({useObjectStreams:false});
+      const url = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = cFile.name.replace(/\.pdf$/i,'') + `_combine_${cSize}_${cParts}_parts.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+      const fittedCount = cPlan.reduce((n,s) => n + s.items.filter(item => item.scaled).length, 0);
+      cSetStatus(`PDF downloaded successfully. ${cParts}-part alignment was automatically selected from the physical sheet capacity.` +
+        (fittedCount ? ` ${fittedCount} page${fittedCount===1?' was':'s were'} proportionally fitted to ${cSize}.` : ''), 'ok');
+    } catch (e) {
+      console.error('Combine Layout PDF Error:', e);
+      cSetStatus('Could not create the Combine Layout PDF. Please try again.', 'error');
+    } finally {
+      cDownload.disabled = false;
+      cPreviewBtn.disabled = false;
+    }
+  });
+})();
+</script>
+
+<!-- Separate fit warning for Combine Layout; existing Printing Layout modal is unchanged. -->
+<div id="combineFitModal" aria-hidden="true">
+  <div id="combineFitDialog" role="dialog" aria-modal="true" aria-labelledby="combineFitTitle">
+    <h3 id="combineFitTitle">Original Page Is Larger Than the Selected Sheet</h3>
+    <p id="combineFitMessage"></p>
+    <div id="combineFitButtons">
+      <button id="combineFitCancel" type="button">Cancel</button>
+      <button id="combineFitConfirm" type="button">Fit to Selected Sheet</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.combine-calculation{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#f7f9fc;color:#344054;font-size:12px;line-height:1.55}.combine-calculation strong{color:#0d1b3e}.combine-calculation .calc-title{font-weight:800;font-size:13px;margin-bottom:4px}.combine-calculation .calc-line{color:var(--muted)}
+#combineFitModal{position:fixed;inset:0;z-index:10001;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(5,10,24,.72);backdrop-filter:blur(4px);}
+#combineFitModal.open{display:flex;}
+#combineFitDialog{width:min(480px,94vw);background:#fff;border-radius:18px;padding:22px;box-shadow:0 22px 70px rgba(0,0,0,.28);border:1px solid var(--border);}
+#combineFitDialog h3{margin:0 0 9px;font-size:19px;}
+#combineFitDialog p{margin:0;color:var(--muted);font-size:13px;line-height:1.55;}
+#combineFitButtons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;}
+#combineFitButtons button{border:0;border-radius:12px;padding:12px 15px;font-weight:800;cursor:pointer;}
+#combineFitCancel{background:#f1f4f8;color:#263142;}
+#combineFitConfirm{color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));}
+#toolChoice .actions{grid-template-columns:repeat(3,minmax(0,1fr));}
+@media(max-width:700px){#toolChoice .actions{grid-template-columns:1fr;}}
+</style>
+
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -1511,6 +2204,5 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
